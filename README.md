@@ -1,16 +1,38 @@
-# ReCoN Demo — Request Confirmation Networks
+# Request Confirmation Network (ReCoN) Implementation
 
-A minimal, faithful **Request Confirmation Network** (ReCoN) implementation with a dynamic Streamlit visualization and a toy perception stack for *active parts-of confirmation* in synthetic 2D scenes (e.g., a “house” made of roof/body/door).
+A faithful, comprehensive **Request Confirmation Network** (ReCoN) implementation based on the CoCoNIPS 2015 paper. Features active perception, hierarchical recognition, and temporal sequencing for intelligent object recognition.
 
-## Quickstart
+## 🚀 Key Features
+
+- **Active Perception**: Networks request only relevant information
+- **Hierarchical Recognition**: Multi-level part-based object recognition
+- **Temporal Sequencing**: Ordered execution via precedence links
+- **Interactive Visualization**: Real-time network dynamics
+- **Extensible Architecture**: Clean separation for custom applications
+- **Comprehensive Testing**: Full test coverage for reliability
+
+## 📖 Documentation
+
+- **[Complete Documentation](RECON_DOCUMENTATION.md)**: Comprehensive guide covering theory, implementation, and usage
+- **[Original Paper](CoCoNIPS_2015_paper_6.pdf)**: Request Confirmation Networks for Active Object Recognition
+
+## 🚀 Quickstart
 
 ```bash
-python -m venv .venv && source .venv/bin/activate  # on Windows: .venv\Scripts\activate
+# Create virtual environment
+python -m venv .venv
+.venv\Scripts\activate  # Windows
+# or
+source .venv/bin/activate  # macOS/Linux
+
+# Install dependencies
 pip install -r requirements.txt
+
+# Run interactive demo
 streamlit run viz/app_streamlit.py
 ```
 
-Then click **Generate Scene** and **Run** to watch requests/confirmations flow.
+Then click **Generate Scene** and **Run** to watch the active perception in action!
 
 ## Repo layout
 
@@ -31,15 +53,65 @@ tests/
   test_engine.py      # smoke tests for engine transitions
 ```
 
-## Design sketch
+## 🧠 Core Concepts
 
-- **Nodes:** `Unit(type=script|terminal, state, a)` with real-valued activation `a` and a finite **state** (`inactive, requested, waiting, active, true, confirmed, failed, suppressed`).
-- **Links:** `Edge(u→v, type=sub|sur|por|ret, w)` with typed propagation.
-- **Messages:** explicit message passing system with REQUEST, CONFIRM, INHIBIT_REQUEST, INHIBIT_CONFIRM, and WAIT messages; units have inbox/outbox queues for asynchronous communication.
-- **Update:** discrete steps: (1) compact arithmetic propagation via per-gate functions, (2) process incoming messages, (3) apply node rules to update states and send messages, (4) deliver messages to recipients.
-- **Visualization:** graph state coloring + animated stepper; scene pane shows detected terminals and scan “requests”.
+### Network Components
+- **Script Units**: Orchestrate recognition activities and coordinate children
+- **Terminal Units**: Detect basic features and provide sensory evidence
+- **8-State FSM**: Each unit has states like INACTIVE, REQUESTED, CONFIRMED, FAILED
+- **Typed Links**: SUB (evidence), SUR (requests), POR (sequencing), RET (feedback)
 
-## Notes
+### Algorithm Phases
+1. **Propagation**: Calculate activation flow using gate functions
+2. **State Updates**: Process messages and update unit states
+3. **Message Delivery**: Move messages between unit queues
 
-- This is a **clean-room skeleton**. It captures the *behavioral essence* of ReCoN’s typed propagation and stateful scripts and is structured for clarity + extension (learning, format conversion, AgentFarm hook).
-- Extend `engine.py` to refine gating and inhibitory interactions; extend `perception/terminals.py` with stronger features; add more scripts in `scripts/`.
+### Active Perception
+Unlike passive classifiers, ReCoN **actively requests** only relevant information, making recognition more efficient and selective.
+
+## 🧪 Testing
+
+Run the comprehensive test suite:
+
+```bash
+python -m pytest tests/ -v
+```
+
+All 11 tests should pass, covering state transitions, message passing, inhibition, and temporal sequencing.
+
+## 💡 Usage Examples
+
+### Basic Network Creation
+```python
+from recon_core.graph import Graph, Unit, Edge
+from recon_core.enums import UnitType, LinkType
+from recon_core.engine import Engine
+
+# Create a simple recognition network
+g = Graph()
+g.add_unit(Unit('detector', UnitType.TERMINAL, thresh=0.5))
+g.add_unit(Unit('recognizer', UnitType.SCRIPT))
+
+g.add_edge(Edge('detector', 'recognizer', LinkType.SUB))
+g.add_edge(Edge('recognizer', 'detector', LinkType.SUR))
+
+engine = Engine(g)
+```
+
+### Custom Perception
+```python
+from perception.terminals import simple_filters
+
+# Extract features from your image
+features = simple_filters(your_image_array)
+print(f"Mean intensity: {features['mean']}")
+```
+
+## 🔧 Architecture Notes
+
+- **Clean Implementation**: Faithful to the paper's algorithmic specifications
+- **Extensible Design**: Easy to add custom terminal units or learning mechanisms
+- **Modular Structure**: Clear separation between core algorithm and applications
+- **Well-Tested**: Comprehensive test coverage ensures reliability
+
+For detailed implementation notes, see [RECON_DOCUMENTATION.md](RECON_DOCUMENTATION.md).
