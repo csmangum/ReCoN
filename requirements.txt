@@ -1,0 +1,6 @@
+numpy==1.26.4
+pillow==10.4.0
+pyyaml==6.0.2
+networkx==3.3
+streamlit==1.36.0
+matplotlib==3.8.2

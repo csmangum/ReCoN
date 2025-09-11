@@ -1,0 +1,15 @@
+object: house
+children:
+  - id: roof
+    type: AND
+    parts: [t_horz]   # crude proxy: roof has horizontal edges
+  - id: body
+    type: AND
+    parts: [t_mean]
+  - id: door
+    type: OR
+    parts: [t_vert, t_mean]
+sequence:
+  - scan_edges_left_to_right
+  - verify_roof_above_body
+  - verify_door_inside_body
