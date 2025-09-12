@@ -274,6 +274,27 @@ def test_script_compiler():
     assert any(e.src == 'u_roof' and e.dst == 'u_body' and e.type == LinkType.POR for e in g.out_edges['u_roof'])
     assert any(e.src == 'u_body' and e.dst == 'u_door' and e.type == LinkType.POR for e in g.out_edges['u_body'])
 
+def test_barn_compiler():
+    """Compile barn.yaml and check basic structure and POR mapping."""
+    import os
+    from recon_core import compile_from_file
+    from recon_core.enums import LinkType, UnitType
+
+    yaml_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'scripts', 'barn.yaml'))
+    g = compile_from_file(yaml_path)
+
+    # Root and child scripts
+    assert any(uid.startswith('u_barn') for uid in g.units)
+    for cid in ['u_roof','u_body','u_door']:
+        assert cid in g.units and g.units[cid].kind == UnitType.SCRIPT
+
+    # Terminals exist per parts
+    for tid in ['t_horz','t_mean']:
+        assert tid in g.units and g.units[tid].kind == UnitType.TERMINAL
+
+    # POR at least links body -> door (since sequence included body then verify_door)
+    assert any(e.src == 'u_body' and e.dst == 'u_door' and e.type == LinkType.POR for e in g.out_edges['u_body'])
+
 def main():
     """Run all test suites."""
     print("ReCoN Unit Test Runner")
@@ -288,6 +309,7 @@ def main():
         ([test_learning_system], "Learning System Tests"),
         ([test_state_machine], "State Machine Tests"),
         ([test_integration_scenario], "Integration Tests"),
+        ([test_script_compiler], "Compiler Tests"),
     ]
     
     total_passed = 0

@@ -94,19 +94,27 @@ def compile_from_dict(spec: Dict[str, Any]) -> Graph:
 
     # Sequence wiring using POR between child scripts
     sequence = spec.get('sequence', []) or []
-    # Try to map sequence entries to child IDs when possible
+    # Map sequence entries to ordered child script IDs; include all mentions per step
     seq_units: List[str] = []
     for step in sequence:
-        # Prefer explicit child id match
+        if not isinstance(step, str):
+            continue
+        # If the step exactly equals a child id, take it
         if step in child_name_to_unit:
-            seq_units.append(child_name_to_unit[step])
-        else:
-            # Accept common verbs like 'verify_<child>' or raw identifiers
-            if isinstance(step, str):
-                for cname, uid in child_name_to_unit.items():
-                    if cname in step:
-                        seq_units.append(uid)
-                        break
+            uid = child_name_to_unit[step]
+            if uid not in seq_units:
+                seq_units.append(uid)
+            continue
+        # Otherwise, find all child names mentioned in the step string in textual order
+        mentions: List[tuple[int, str]] = []
+        for cname, uid in child_name_to_unit.items():
+            idx = step.find(cname)
+            if idx != -1:
+                mentions.append((idx, uid))
+        # Sort by position in the string to respect phrasing order
+        for _, uid in sorted(mentions, key=lambda x: x[0]):
+            if uid not in seq_units:
+                seq_units.append(uid)
     # Create POR edges in order
     for a, b in zip(seq_units, seq_units[1:]):
         g.add_edge(Edge(a, b, LinkType.POR, w=1.0))
