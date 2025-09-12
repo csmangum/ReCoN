@@ -10,6 +10,8 @@ import numpy as np
 from .dataset import make_house_scene
 from scipy import ndimage
 import matplotlib.pyplot as plt
+import pickle
+import os
 
 
 def simple_filters(img):
@@ -271,4 +273,339 @@ def advanced_sample_scene_and_terminals():
     """
     img = make_house_scene()
     t = advanced_terminals_from_image(img)
+    return img, t
+
+
+class SimpleAutoencoder:
+    """
+    A simple denoising autoencoder for extracting compressed patch features.
+    
+    This lightweight autoencoder learns to reconstruct small image patches
+    and provides the compressed representation as terminal features for ReCoN.
+    """
+    
+    def __init__(self, patch_size=8, latent_dim=4, noise_factor=0.1):
+        """
+        Initialize the autoencoder.
+        
+        Args:
+            patch_size: Size of square patches to extract (default: 8x8)
+            latent_dim: Dimension of compressed representation (default: 4)
+            noise_factor: Amount of noise to add for denoising training (default: 0.1)
+        """
+        self.patch_size = patch_size
+        self.latent_dim = latent_dim
+        self.noise_factor = noise_factor
+        
+        # Network dimensions
+        self.input_dim = patch_size * patch_size
+        self.hidden_dim = max(8, latent_dim * 2)
+        
+        # Initialize weights with small random values
+        self.W_encoder = np.random.randn(self.input_dim, self.hidden_dim) * 0.1
+        self.b_encoder = np.zeros(self.hidden_dim)
+        self.W_latent = np.random.randn(self.hidden_dim, self.latent_dim) * 0.1
+        self.b_latent = np.zeros(self.latent_dim)
+        
+        self.W_decode = np.random.randn(self.latent_dim, self.hidden_dim) * 0.1
+        self.b_decode = np.zeros(self.hidden_dim)
+        self.W_output = np.random.randn(self.hidden_dim, self.input_dim) * 0.1
+        self.b_output = np.zeros(self.input_dim)
+        
+        self.is_trained = False
+    
+    def _sigmoid(self, x):
+        """Sigmoid activation function with numerical stability."""
+        return 1 / (1 + np.exp(-np.clip(x, -250, 250)))
+    
+    def _relu(self, x):
+        """ReLU activation function."""
+        return np.maximum(0, x)
+    
+    def _extract_patches(self, img, n_patches=20):
+        """Extract random patches from an image."""
+        patches = []
+        h, w = img.shape
+        
+        for _ in range(n_patches):
+            # Random top-left corner ensuring patch fits in image
+            y = np.random.randint(0, max(1, h - self.patch_size))
+            x = np.random.randint(0, max(1, w - self.patch_size))
+            
+            patch = img[y:y+self.patch_size, x:x+self.patch_size]
+            
+            # Handle edge cases where patch might be smaller than expected
+            if patch.shape != (self.patch_size, self.patch_size):
+                patch = np.pad(patch, 
+                             ((0, self.patch_size - patch.shape[0]),
+                              (0, self.patch_size - patch.shape[1])),
+                             mode='constant', constant_values=0)
+            
+            patches.append(patch.flatten())
+        
+        return np.array(patches)
+    
+    def _forward(self, x):
+        """Forward pass through the autoencoder."""
+        # Encoder
+        h1 = self._relu(np.dot(x, self.W_encoder) + self.b_encoder)
+        latent = self._sigmoid(np.dot(h1, self.W_latent) + self.b_latent)
+        
+        # Decoder  
+        h2 = self._relu(np.dot(latent, self.W_decode) + self.b_decode)
+        output = self._sigmoid(np.dot(h2, self.W_output) + self.b_output)
+        
+        return output, latent, h1, h2
+    
+    def train(self, training_images, n_epochs=50, learning_rate=0.01):
+        """
+        Train the autoencoder on patches from training images.
+        
+        Args:
+            training_images: List of 2D numpy arrays representing training scenes
+            n_epochs: Number of training epochs (default: 50)
+            learning_rate: Learning rate for gradient descent (default: 0.01)
+        """
+        # Extract training patches from all images
+        all_patches = []
+        for img in training_images:
+            patches = self._extract_patches(img, n_patches=10)
+            all_patches.append(patches)
+        
+        X_train = np.vstack(all_patches)
+        
+        print(f"Training autoencoder on {X_train.shape[0]} patches...")
+        
+        # Training loop
+        for epoch in range(n_epochs):
+            total_loss = 0
+            
+            # Shuffle training data
+            indices = np.random.permutation(len(X_train))
+            X_shuffled = X_train[indices]
+            
+            for i in range(0, len(X_shuffled), 32):  # Mini-batch size of 32
+                batch = X_shuffled[i:i+32]
+                
+                # Add noise for denoising
+                noisy_batch = batch + self.noise_factor * np.random.randn(*batch.shape)
+                noisy_batch = np.clip(noisy_batch, 0, 1)
+                
+                # Forward pass
+                output, latent, h1, h2 = self._forward(noisy_batch)
+                
+                # Compute loss (MSE)
+                loss = np.mean((output - batch) ** 2)
+                total_loss += loss
+                
+                # Backward pass (simplified gradient descent)
+                # Output layer gradients
+                d_output = 2 * (output - batch) / batch.shape[0]
+                d_W_output = np.dot(h2.T, d_output)
+                d_b_output = np.sum(d_output, axis=0)
+                
+                # Hidden layer 2 gradients
+                d_h2 = np.dot(d_output, self.W_output.T)
+                d_h2[h2 <= 0] = 0  # ReLU derivative
+                d_W_decode = np.dot(latent.T, d_h2)
+                d_b_decode = np.sum(d_h2, axis=0)
+                
+                # Latent layer gradients
+                d_latent = np.dot(d_h2, self.W_decode.T)
+                d_latent = d_latent * latent * (1 - latent)  # Sigmoid derivative
+                d_W_latent = np.dot(h1.T, d_latent)
+                d_b_latent = np.sum(d_latent, axis=0)
+                
+                # Hidden layer 1 gradients
+                d_h1 = np.dot(d_latent, self.W_latent.T)
+                d_h1[h1 <= 0] = 0  # ReLU derivative
+                d_W_encoder = np.dot(noisy_batch.T, d_h1)
+                d_b_encoder = np.sum(d_h1, axis=0)
+                
+                # Update weights
+                self.W_output -= learning_rate * d_W_output
+                self.b_output -= learning_rate * d_b_output
+                self.W_decode -= learning_rate * d_W_decode
+                self.b_decode -= learning_rate * d_b_decode
+                self.W_latent -= learning_rate * d_W_latent
+                self.b_latent -= learning_rate * d_b_latent
+                self.W_encoder -= learning_rate * d_W_encoder
+                self.b_encoder -= learning_rate * d_b_encoder
+            
+            if epoch % 10 == 0:
+                avg_loss = total_loss / (len(X_shuffled) // 32 + 1)
+                print(f"Epoch {epoch}: Loss = {avg_loss:.6f}")
+        
+        self.is_trained = True
+        print("Autoencoder training completed!")
+    
+    def encode_patches(self, img, n_patches=8):
+        """
+        Extract and encode patches from an image.
+        
+        Args:
+            img: Input image as 2D numpy array
+            n_patches: Number of patches to extract and average (default: 8)
+            
+        Returns:
+            numpy.ndarray: Average latent representation of patches
+        """
+        if not self.is_trained:
+            # Use random encoding if not trained
+            patches = self._extract_patches(img, n_patches)
+            return np.random.rand(self.latent_dim) * 0.1
+        
+        patches = self._extract_patches(img, n_patches)
+        _, latents, _, _ = self._forward(patches)
+        
+        # Return average latent representation
+        return np.mean(latents, axis=0)
+    
+    def save(self, filepath):
+        """Save the trained autoencoder to disk."""
+        model_data = {
+            'W_encoder': self.W_encoder,
+            'b_encoder': self.b_encoder,
+            'W_latent': self.W_latent,
+            'b_latent': self.b_latent,
+            'W_decode': self.W_decode,
+            'b_decode': self.b_decode,
+            'W_output': self.W_output,
+            'b_output': self.b_output,
+            'patch_size': self.patch_size,
+            'latent_dim': self.latent_dim,
+            'noise_factor': self.noise_factor,
+            'is_trained': self.is_trained
+        }
+        
+        with open(filepath, 'wb') as f:
+            pickle.dump(model_data, f)
+    
+    def load(self, filepath):
+        """Load a trained autoencoder from disk."""
+        with open(filepath, 'rb') as f:
+            model_data = pickle.load(f)
+        
+        self.W_encoder = model_data['W_encoder']
+        self.b_encoder = model_data['b_encoder']
+        self.W_latent = model_data['W_latent']
+        self.b_latent = model_data['b_latent']
+        self.W_decode = model_data['W_decode']
+        self.b_decode = model_data['b_decode']
+        self.W_output = model_data['W_output']
+        self.b_output = model_data['b_output']
+        self.patch_size = model_data['patch_size']
+        self.latent_dim = model_data['latent_dim']
+        self.noise_factor = model_data['noise_factor']
+        self.is_trained = model_data['is_trained']
+
+
+# Global autoencoder instance for terminal features
+_global_autoencoder = None
+
+
+def get_autoencoder(retrain=False):
+    """
+    Get or create the global autoencoder instance.
+    
+    Args:
+        retrain: Whether to retrain the autoencoder (default: False)
+        
+    Returns:
+        SimpleAutoencoder: The global autoencoder instance
+    """
+    global _global_autoencoder
+    
+    model_path = '/tmp/recon_autoencoder.pkl'
+    
+    if _global_autoencoder is None:
+        _global_autoencoder = SimpleAutoencoder(patch_size=8, latent_dim=4)
+        
+        # Try to load existing trained model
+        if os.path.exists(model_path) and not retrain:
+            try:
+                _global_autoencoder.load(model_path)
+                print("Loaded pretrained autoencoder")
+            except:
+                print("Failed to load autoencoder, will train new one")
+                _global_autoencoder.is_trained = False
+        
+        # Train if needed
+        if not _global_autoencoder.is_trained or retrain:
+            from .dataset import make_house_scene, make_barn_scene, make_varied_scene
+            
+            print("Training autoencoder...")
+            # Generate diverse training data
+            training_images = []
+            for _ in range(20):
+                training_images.append(make_house_scene(noise=0.05))
+                training_images.append(make_barn_scene(noise=0.05))
+                training_images.append(make_varied_scene('house', noise=0.1))
+                training_images.append(make_varied_scene('barn', noise=0.1))
+            
+            _global_autoencoder.train(training_images, n_epochs=30)
+            _global_autoencoder.save(model_path)
+    
+    return _global_autoencoder
+
+
+def autoencoder_terminals_from_image(img):
+    """
+    Extract autoencoder-based terminal features from an image.
+    
+    Args:
+        img: Input image as 2D numpy array
+        
+    Returns:
+        dict: Dictionary mapping autoencoder terminal IDs to activation values
+    """
+    ae = get_autoencoder()
+    
+    # Get latent representation
+    latent_features = ae.encode_patches(img, n_patches=12)
+    
+    # Create terminal activations from latent features
+    terminals = {}
+    for i, feat_val in enumerate(latent_features):
+        terminals[f't_ae_{i}'] = float(feat_val)
+    
+    return terminals
+
+
+def comprehensive_terminals_from_image(img):
+    """
+    Extract comprehensive terminal features using all available methods.
+    
+    Combines basic filters, advanced features, and autoencoder features
+    into one comprehensive feature set for maximum representational power.
+    
+    Args:
+        img: Input image as 2D numpy array
+        
+    Returns:
+        dict: Dictionary mapping all terminal IDs to activation values
+    """
+    # Get all feature types
+    advanced_features = advanced_terminals_from_image(img)
+    autoencoder_features = autoencoder_terminals_from_image(img)
+    
+    # Combine all features
+    all_terminals = {}
+    all_terminals.update(advanced_features)
+    all_terminals.update(autoencoder_features)
+    
+    return all_terminals
+
+
+def comprehensive_sample_scene_and_terminals():
+    """
+    Generate a random synthetic scene and extract all available terminal features.
+
+    Returns:
+        tuple: (image, terminals) where:
+               - image: Generated 2D numpy array representing the scene
+               - terminals: Dictionary of all available terminal unit activations
+    """
+    img = make_house_scene()
+    t = comprehensive_terminals_from_image(img)
     return img, t

@@ -43,8 +43,8 @@ recon_core/
   engine.py       # propagation + state update rules
   learn.py        # (optional) tiny learning helpers for sur weights
 perception/
-  dataset.py      # synthetic 2D scenes (64x64) with simple shapes
-  terminals.py    # terminal feature detectors (filters/AE stub)
+  dataset.py      # synthetic 2D scenes with variety (houses, barns, occlusion)
+  terminals.py    # comprehensive terminal features (filters + SIFT + autoencoder)
 scripts/
   house.yaml      # script → recon graph compiler input
 viz/
@@ -77,7 +77,10 @@ Run the comprehensive test suite:
 python -m pytest tests/ -v
 ```
 
-All 11 tests should pass, covering state transitions, message passing, inhibition, and temporal sequencing.
+**44 tests** covering:
+- **18 synthetic scene tests**: Drawing primitives, house/barn generation, occlusion, variations
+- **26 terminal feature tests**: Basic filters, SIFT-like features, autoencoder, integration
+- **Original core tests**: State transitions, message passing, inhibition, temporal sequencing
 
 ## 💡 Usage Examples
 
@@ -98,13 +101,21 @@ g.add_edge(Edge('recognizer', 'detector', LinkType.SUR))
 engine = Engine(g)
 ```
 
-### Custom Perception
+### Perception Pipeline
 ```python
-from perception.terminals import simple_filters
+from perception.dataset import make_varied_scene
+from perception.terminals import comprehensive_terminals_from_image
 
-# Extract features from your image
-features = simple_filters(your_image_array)
-print(f"Mean intensity: {features['mean']}")
+# Generate diverse synthetic scenes
+house_scene = make_varied_scene('house', size=64, noise=0.1)
+barn_scene = make_varied_scene('barn', size=64) 
+occluded_scene = make_varied_scene('occluded', size=64)
+
+# Extract comprehensive features (16 terminals)
+features = comprehensive_terminals_from_image(house_scene)
+print(f"Basic: mean={features['t_mean']:.3f}, edges={features['t_vert']:.3f}")
+print(f"SIFT: corners={features['t_corners']:.3f}, grad_mag={features['t_edges']:.3f}")
+print(f"Autoencoder: {features['t_ae_0']:.3f}, {features['t_ae_1']:.3f}")
 ```
 
 ## 🔧 Architecture Notes

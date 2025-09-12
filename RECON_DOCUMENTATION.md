@@ -291,19 +291,93 @@ The Streamlit interface provides:
 
 ### Perception Pipeline
 
-The implementation includes a synthetic perception pipeline:
+The implementation includes a comprehensive synthetic perception pipeline with diverse scene generation and rich feature extraction:
+
+#### Synthetic Scene Generation
 
 ```python
-from perception.terminals import sample_scene_and_terminals
+from perception.dataset import *
 
-# Generate scene and extract features
-image, terminal_features = sample_scene_and_terminals()
+# Generate diverse scene types
+house = make_house_scene(size=64, noise=0.05)
+barn = make_barn_scene(size=64, scale_factor=1.2) 
+occluded = make_occluded_scene(size=64, occlusion_type='tree')
 
-# Features include:
-# - t_mean: Overall image brightness
-# - t_vert: Vertical edge strength
-# - t_horz: Horizontal edge strength
+# Random variations for training diversity
+varied_house = make_varied_scene('house', size=64, 
+                                scale_range=(0.7, 1.3), 
+                                position_variance=0.2)
 ```
+
+**Scene Types:**
+- **Houses**: Traditional house with triangular roof, rectangular body, door
+- **Barns**: Wider structures with arched roofs and large door openings
+- **Occluded scenes**: Houses partially hidden by trees, clouds, or boxes
+- **Varied scenes**: Random scaling, positioning, and noise for diversity
+
+#### Comprehensive Terminal Features
+
+```python
+from perception.terminals import comprehensive_terminals_from_image
+
+# Extract all 16 terminal features
+features = comprehensive_terminals_from_image(scene)
+
+# Basic features (3 terminals)
+print(f"Mean intensity: {features['t_mean']:.3f}")
+print(f"Vertical edges: {features['t_vert']:.3f}")  
+print(f"Horizontal edges: {features['t_horz']:.3f}")
+
+# SIFT-like features (3 terminals)  
+print(f"Corner strength: {features['t_corners']:.3f}")
+print(f"Edge magnitude: {features['t_edges']:.3f}")
+print(f"Orientation variance: {features['t_orient_var']:.3f}")
+
+# Blob detection (3 terminals)
+print(f"Blob density: {features['t_blobs']:.3f}")
+print(f"Local texture: {features['t_texture']:.3f}")
+print(f"Global contrast: {features['t_contrast']:.3f}")
+
+# Geometric features (3 terminals)
+print(f"Shape count: {features['t_n_shapes']:.3f}")
+print(f"Compactness: {features['t_compact']:.3f}") 
+print(f"Aspect ratio: {features['t_aspect']:.3f}")
+
+# Autoencoder features (4 terminals)
+print(f"Latent features: {[features[f't_ae_{i}'] for i in range(4)]}")
+```
+
+**Feature Categories:**
+1. **Basic Filters**: Mean intensity, edge detection using simple convolution
+2. **SIFT-like**: Harris corner detection, gradient analysis, orientation statistics  
+3. **Blob Detection**: Difference of Gaussians, texture analysis, contrast measurement
+4. **Geometric Analysis**: Connected components, shape properties, spatial relationships
+5. **Autoencoder**: Learned patch representations via denoising autoencoder
+
+#### Autoencoder Terminal Details
+
+The system includes a lightweight denoising autoencoder for learned feature extraction:
+
+```python
+from perception.terminals import SimpleAutoencoder, get_autoencoder
+
+# Get the global autoencoder (automatically trains on diverse scenes)
+ae = get_autoencoder()
+
+# Extract autoencoder features directly
+ae_features = ae.encode_patches(your_image, n_patches=8)
+
+# Or use through the terminal interface
+ae_terminals = autoencoder_terminals_from_image(your_image)
+```
+
+**Autoencoder Architecture:**
+- **Input**: 8×8 image patches (64 dimensions)
+- **Hidden Layer**: 8 neurons with ReLU activation
+- **Latent**: 4 dimensions with sigmoid activation  
+- **Decoder**: Symmetric reconstruction path
+- **Training**: Denoising reconstruction on diverse synthetic scenes
+- **Features**: Compressed patch representations averaged across image
 
 ## Advanced Features
 
@@ -320,34 +394,83 @@ update_weights(engine, learning_rate=0.01)
 
 ### Custom Terminal Units
 
-Extend the perception pipeline with custom feature detectors:
+The system provides multiple levels of terminal feature extraction that you can extend:
 
 ```python
-from perception.terminals import terminals_from_image
+# Use different feature extraction levels
+from perception.terminals import (
+    terminals_from_image,           # Basic 3 features
+    advanced_terminals_from_image,  # Advanced 12 features  
+    comprehensive_terminals_from_image  # All 16 features
+)
 
+# Create custom terminal extractors
 def custom_terminals_from_image(img):
-    # Your custom feature extraction
-    features = {
-        't_custom_feature': your_feature_detector(img)
-    }
+    # Start with existing comprehensive features
+    features = comprehensive_terminals_from_image(img)
+    
+    # Add your custom features
+    features.update({
+        't_custom_feature': your_feature_detector(img),
+        't_domain_specific': domain_specific_analysis(img)
+    })
     return features
+
+# Or extend the autoencoder approach
+from perception.terminals import SimpleAutoencoder
+
+# Train specialized autoencoder for your domain
+custom_ae = SimpleAutoencoder(patch_size=16, latent_dim=8)
+custom_ae.train(your_training_images, n_epochs=100)
+
+# Use in ReCoN network
+def specialized_ae_terminals(img):
+    latent_features = custom_ae.encode_patches(img)
+    return {f't_spec_ae_{i}': feat for i, feat in enumerate(latent_features)}
 ```
+
+**Extension Points:**
+- **Basic Level**: Add simple filter-based features
+- **Advanced Level**: Implement sophisticated computer vision algorithms  
+- **Autoencoder Level**: Train domain-specific learned representations
+- **Hybrid Approach**: Combine multiple feature types for maximum discrimination
 
 ## Testing
 
-The implementation includes comprehensive tests:
+The implementation includes comprehensive test coverage with **44 total tests**:
 
 ```bash
 # Run all tests
 python -m pytest tests/ -v
 
-# Key test areas:
-# - State machine transitions
-# - Message passing
-# - Inhibition mechanisms
-# - Temporal sequencing
-# - Failure propagation
+# Run specific test modules
+python -m pytest tests/test_synthetic_scenes.py -v  # 18 scene generation tests
+python -m pytest tests/test_terminals.py -v        # 26 terminal feature tests
+python -m pytest tests/test_engine.py -v           # Core ReCoN engine tests
 ```
+
+### Test Coverage
+
+#### Synthetic Scene Generation Tests (18 tests)
+- **Basic Drawing**: Canvas creation, rectangle/triangle primitives
+- **House Scenes**: Basic generation, scaling, positioning, noise robustness
+- **Barn Scenes**: Structure validation, house/barn discrimination
+- **Occluded Scenes**: Tree/cloud/box occlusion types, vs clean comparison
+- **Varied Scenes**: Randomization, scale ranges, unknown type handling
+
+#### Terminal Feature Tests (26 tests) 
+- **Basic Filters**: Edge detection, uniform images, blank canvas handling
+- **Advanced Features**: SIFT-like, blob detection, geometric analysis
+- **Autoencoder**: Training, encoding, save/load, patch extraction
+- **Integration**: Comprehensive features, convenience functions
+- **Discrimination**: House vs barn, noise robustness, scale invariance
+
+#### Core ReCoN Tests (Original)
+- **State Transitions**: All 8 state changes, edge cases
+- **Message Passing**: Request/confirm/inhibit message flow
+- **Inhibition**: Lateral and feedback inhibition mechanisms  
+- **Temporal Sequencing**: POR/RET link behavior
+- **Failure Propagation**: Error handling and recovery
 
 ## Performance Characteristics
 
