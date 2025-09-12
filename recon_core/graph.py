@@ -10,7 +10,6 @@ This module defines the core data structures used to represent the network topol
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Tuple
-import numpy as np
 from .enums import UnitType, LinkType, State, Message
 
 

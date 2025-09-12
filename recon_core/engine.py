@@ -16,10 +16,9 @@ The ReCoN algorithm operates in discrete time steps with three main phases:
 """
 
 from __future__ import annotations
-from typing import Dict, List
-import numpy as np
+from typing import Dict
 from .enums import UnitType, LinkType, State, Message
-from .graph import Graph, Unit
+from .graph import Graph
 
 
 class Engine:
@@ -35,6 +34,7 @@ class Engine:
         g: The network graph containing units and edges
         t: Current simulation time step
     """
+
     def __init__(self, g: Graph):
         """
         Initialize the ReCoN engine with a network graph.
@@ -232,10 +232,12 @@ class Engine:
 
         # Update activations softly
         for uid, u in self.g.units.items():
-            u.a = float(np.clip(u.a + 0.2*delta[uid], 0.0, 1.0))
+            u.a = max(0.0, min(1.0, u.a + 0.8 * delta[uid]))
 
         # State transitions and message sending
-        for uid, u in self.g.units.items():
+        # Process units in reverse order so children are processed before parents
+        for uid in reversed(list(self.g.units.keys())):
+            u = self.g.units[uid]
             if u.kind == UnitType.TERMINAL:
                 # Terminal state machine with message sending
                 # Only process state transitions if no messages have changed the state
@@ -275,19 +277,38 @@ class Engine:
                     # Children should have been requested when we became REQUESTED
                     # No need to request again
 
-                # Check if enough children are TRUE to confirm (for both REQUESTED->ACTIVE and existing ACTIVE)
-                if u.state == State.ACTIVE:
+                # Check if enough children are TRUE to confirm (for both REQUESTED->ACTIVE and existing ACTIVE/CONFIRMED)
+                if u.state in (State.ACTIVE, State.CONFIRMED):
                     child_ids = self.g.sub_children(u.id)
-                    trues = sum(1 for c in child_ids if self.g.units[c].state in (State.TRUE, State.CONFIRMED))
-                    failed = any(self.g.units[c].state == State.FAILED for c in child_ids)
-                    need = max(1, int(0.6*len(child_ids))) if child_ids else 0
+                    trues = sum(
+                        1
+                        for c in child_ids
+                        if self.g.units[c].state in (State.TRUE, State.CONFIRMED)
+                    )
+                    failed = any(
+                        self.g.units[c].state == State.FAILED for c in child_ids
+                    )
+                    need = max(1, int(0.6 * len(child_ids))) if child_ids else 0
 
-                    if child_ids and trues >= need and not failed and u.state != State.CONFIRMED:
+                    if (
+                        child_ids
+                        and trues >= need
+                        and not failed
+                        and u.state != State.CONFIRMED
+                    ):
                         u.state = State.CONFIRMED
                         # Send CONFIRM to parent (via SUB links)
                         for edge in self.g.out_edges[uid]:
                             if edge.type == LinkType.SUB:
                                 u.outbox.append((edge.dst, Message.CONFIRM))
+                    elif (
+                        u.state == State.CONFIRMED
+                        and child_ids
+                        and (trues < need or failed)
+                    ):
+                        # If confirmed but no longer meets criteria, revert to ACTIVE
+                        # Only check this for scripts that actually have children
+                        u.state = State.ACTIVE
 
                 # Handle POR succession for confirmed scripts
                 if u.state == State.CONFIRMED:
@@ -296,7 +317,11 @@ class Engine:
                         u.outbox.append((succ_id, Message.REQUEST))
 
                 # Handle inhibition from failed children - fail immediately if any child fails
-                failed_children = [c for c in self.g.sub_children(u.id) if self.g.units[c].state == State.FAILED]
+                failed_children = [
+                    c
+                    for c in self.g.sub_children(u.id)
+                    if self.g.units[c].state == State.FAILED
+                ]
                 if failed_children and u.state not in (State.FAILED,):
                     old_state = u.state
                     u.state = State.FAILED
@@ -310,10 +335,11 @@ class Engine:
         """
         Advance the simulation by n time steps.
 
-        Each time step consists of three phases:
+        Each time step consists of four phases:
         1. Propagation: Calculate activation deltas using gate functions
         2. State Update: Process messages and update unit states
         3. Message Delivery: Move messages from outboxes to inboxes
+        4. Second Message Processing: Process newly delivered messages
 
         Args:
             n: Number of time steps to advance (default: 1)
@@ -325,6 +351,9 @@ class Engine:
             delta = self._propagate()
             self._update_states(delta)
             self._deliver_messages()  # deliver messages after state updates
+            # Process newly delivered messages in the same step
+            for uid in self.g.units:
+                self._process_messages(uid)
             self.t += 1
         return self.snapshot()
 
@@ -342,16 +371,16 @@ class Engine:
                 - 'units': Dictionary of unit states with activation, state, etc.
         """
         return {
-            't': self.t,
-            'units': {
+            "t": self.t,
+            "units": {
                 uid: {
-                    'state': u.state.name,
-                    'a': u.a,
-                    'kind': u.kind.name,
-                    'meta': u.meta,
-                    'inbox_size': len(u.inbox),
-                    'outbox_size': len(u.outbox)
+                    "state": u.state.name,
+                    "a": u.a,
+                    "kind": u.kind.name,
+                    "meta": u.meta,
+                    "inbox_size": len(u.inbox),
+                    "outbox_size": len(u.outbox),
                 }
                 for uid, u in self.g.units.items()
-            }
+            },
         }

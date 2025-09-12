@@ -3,7 +3,12 @@ from recon_core.graph import Graph, Unit, Edge
 from recon_core.engine import Engine
 
 def test_smoke():
-    """Basic smoke test for engine functionality"""
+    """Basic smoke test for engine functionality.
+    
+    Creates a simple graph with a script unit and terminal child, activates the root,
+    and verifies the engine can execute multiple steps without crashing while
+    maintaining valid state transitions.
+    """
     g = Graph()
     g.add_unit(Unit('root', UnitType.SCRIPT))
     g.add_unit(Unit('t1', UnitType.TERMINAL, a=1.0))
@@ -11,11 +16,16 @@ def test_smoke():
     e = Engine(g)
     g.units['root'].a = 1.0
     g.units['root'].state = State.ACTIVE
-    snap = e.step(5)
+    e.step(5)
     assert g.units['root'].state in (State.REQUESTED, State.ACTIVE, State.CONFIRMED)
 
 def test_message_passing_basic():
-    """Test basic message passing between units"""
+    """Test basic message passing between units.
+    
+    Verifies that REQUEST messages are properly delivered from parent to child
+    units, causing the child to transition to REQUESTED state and receive
+    activation boost to at least 0.3.
+    """
     g = Graph()
     g.add_unit(Unit('parent', UnitType.SCRIPT))
     g.add_unit(Unit('child', UnitType.TERMINAL))
@@ -35,7 +45,12 @@ def test_message_passing_basic():
     assert g.units['child'].a >= 0.3
 
 def test_inhibition_request():
-    """Test INHIBIT_REQUEST message suppresses requested units"""
+    """Test INHIBIT_REQUEST message suppresses requested units.
+    
+    Validates that INHIBIT_REQUEST messages can suppress units in REQUESTED state,
+    transitioning them to SUPPRESSED and reducing their activation below 0.2.
+    This is crucial for competitive inhibition in the network.
+    """
     g = Graph()
     g.add_unit(Unit('parent', UnitType.SCRIPT))
     g.add_unit(Unit('child', UnitType.TERMINAL, state=State.REQUESTED, a=0.5))
@@ -51,7 +66,12 @@ def test_inhibition_request():
     assert g.units['child'].a <= 0.2
 
 def test_inhibition_confirm():
-    """Test INHIBIT_CONFIRM message fails confirmed/true units"""
+    """Test INHIBIT_CONFIRM message fails confirmed/true units.
+    
+    Ensures that INHIBIT_CONFIRM messages can force units in TRUE or CONFIRMED
+    states to transition to FAILED, with activation dropping to ~0.3 or below.
+    This enables error correction and conflict resolution in the network.
+    """
     g = Graph()
     g.add_unit(Unit('parent', UnitType.SCRIPT))
     g.add_unit(Unit('child', UnitType.TERMINAL, state=State.TRUE, a=0.8))
@@ -67,7 +87,13 @@ def test_inhibition_confirm():
     assert g.units['child'].a <= 0.31  # Allow for floating point precision
 
 def test_terminal_state_transitions():
-    """Test terminal unit state transitions with messages"""
+    """Test terminal unit state transitions with messages.
+    
+    Validates the complete terminal unit lifecycle: receiving REQUEST message,
+    having sufficient activation above threshold, transitioning to TRUE state,
+    and sending CONFIRM message back to parent. This tests the core
+    bottom-up evidence flow in ReCoN.
+    """
     g = Graph()
     g.add_unit(Unit('parent', UnitType.SCRIPT))
     g.add_unit(Unit('terminal', UnitType.TERMINAL, thresh=0.5))
@@ -87,7 +113,12 @@ def test_terminal_state_transitions():
     assert g.units['terminal'].outbox[0] == ('parent', Message.CONFIRM)
 
 def test_script_request_propagation():
-    """Test script sends REQUEST to children via SUR links"""
+    """Test script sends REQUEST to children via SUR links.
+    
+    Verifies that script units with sufficient activation automatically send
+    REQUEST messages to all children connected via SUR (surrogate) links.
+    This implements the top-down hypothesis propagation mechanism in ReCoN.
+    """
     g = Graph()
     g.add_unit(Unit('parent', UnitType.SCRIPT))
     g.add_unit(Unit('child1', UnitType.TERMINAL))
@@ -109,11 +140,16 @@ def test_script_request_propagation():
     assert all(msg == Message.REQUEST for msg in requests)
 
 def test_script_confirmation():
-    """Test script confirms when enough children are TRUE"""
+    """Test script confirms when enough children are TRUE.
+    
+    Tests that script units transition to CONFIRMED state when a sufficient
+    percentage (default 60%) of their SUB-linked children are in TRUE state.
+    This validates the evidence aggregation logic for hierarchical recognition.
+    """
     g = Graph()
     g.add_unit(Unit('parent', UnitType.SCRIPT))
-    g.add_unit(Unit('child1', UnitType.TERMINAL, state=State.TRUE))
-    g.add_unit(Unit('child2', UnitType.TERMINAL, state=State.TRUE))
+    g.add_unit(Unit('child1', UnitType.TERMINAL, state=State.TRUE, a=0.8))
+    g.add_unit(Unit('child2', UnitType.TERMINAL, state=State.TRUE, a=0.8))
     g.add_edge(Edge('child1', 'parent', LinkType.SUB))
     g.add_edge(Edge('child2', 'parent', LinkType.SUB))
 
@@ -127,7 +163,12 @@ def test_script_confirmation():
     assert g.units['parent'].state == State.CONFIRMED
 
 def test_failure_propagation():
-    """Test failure propagates through inhibition"""
+    """Test failure propagates through inhibition.
+    
+    Validates that when a child unit fails, the parent script unit also fails
+    and sends INHIBIT_CONFIRM messages up the hierarchy. This ensures that
+    failures cascade properly through the network to maintain consistency.
+    """
     g = Graph()
     g.add_unit(Unit('grandparent', UnitType.SCRIPT))
     g.add_unit(Unit('parent', UnitType.SCRIPT))
@@ -148,7 +189,12 @@ def test_failure_propagation():
     assert g.units['parent'].outbox[0] == ('grandparent', Message.INHIBIT_CONFIRM)
 
 def test_por_succession():
-    """Test POR links enable sequential execution"""
+    """Test POR links enable sequential execution.
+    
+    Verifies that POR (precedence-order) links create temporal sequences
+    where a confirmed unit sends REQUEST to its POR successors. This enables
+    sequential script execution and temporal reasoning in ReCoN.
+    """
     g = Graph()
     g.add_unit(Unit('script1', UnitType.SCRIPT, state=State.CONFIRMED))
     g.add_unit(Unit('script2', UnitType.SCRIPT))
@@ -162,7 +208,13 @@ def test_por_succession():
     assert g.units['script1'].outbox[0] == ('script2', Message.REQUEST)
 
 def test_failure_from_failed_child():
-    """Test script fails immediately when any child fails"""
+    """Test script fails immediately when any child fails.
+    
+    Ensures that script units fail immediately upon detecting any failed
+    child, regardless of other children's states. This implements the
+    'fail-fast' principle where any contradictory evidence causes rejection
+    of the hypothesis.
+    """
     g = Graph()
     g.add_unit(Unit('grandparent', UnitType.SCRIPT))
     g.add_unit(Unit('parent', UnitType.SCRIPT))
@@ -184,7 +236,12 @@ def test_failure_from_failed_child():
     assert g.units['parent'].outbox[0] == ('grandparent', Message.INHIBIT_CONFIRM)
 
 def test_message_delivery():
-    """Test that outbox messages are delivered to inboxes"""
+    """Test that outbox messages are delivered to inboxes.
+    
+    Validates the message delivery system where messages placed in a unit's
+    outbox are properly transferred to the recipient's inbox during the
+    message delivery phase. This tests the core communication infrastructure.
+    """
     g = Graph()
     g.add_unit(Unit('sender', UnitType.SCRIPT))
     g.add_unit(Unit('receiver', UnitType.TERMINAL))
