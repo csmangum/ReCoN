@@ -227,6 +227,53 @@ def test_integration_scenario():
     # Root should be CONFIRMED
     assert snapshot['units']['root']['state'] == 'CONFIRMED'
 
+def test_script_compiler():
+    """Test YAML->Graph compiler builds expected topology and POR sequence."""
+    import os
+    from recon_core import compile_from_file
+    from recon_core.enums import LinkType, UnitType
+
+    yaml_path = os.path.join(os.path.dirname(__file__), 'scripts', 'house.yaml')
+    # When run from repo root, adjust path accordingly
+    if not os.path.exists(yaml_path):
+        yaml_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scripts', 'house.yaml')
+        if not os.path.exists(yaml_path):
+            yaml_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'scripts', 'house.yaml'))
+
+    g = compile_from_file(yaml_path)
+
+    # Root and child scripts exist
+    assert any(uid.startswith('u_house') for uid in g.units), "Root script missing"
+    for cid in ['u_roof','u_body','u_door']:
+        assert cid in g.units and g.units[cid].kind == UnitType.SCRIPT
+
+    # Terminals exist
+    for tid in ['t_horz','t_mean','t_vert']:
+        assert tid in g.units and g.units[tid].kind == UnitType.TERMINAL
+
+    # Check SUB/SUR wiring between root and children
+    root_id = [uid for uid in g.units if uid.startswith('u_house')][0]
+    # child -> root SUB
+    assert any(e.src == 'u_roof' and e.dst == root_id and e.type == LinkType.SUB for e in g.in_edges[root_id])
+    assert any(e.src == 'u_body' and e.dst == root_id and e.type == LinkType.SUB for e in g.in_edges[root_id])
+    assert any(e.src == 'u_door' and e.dst == root_id and e.type == LinkType.SUB for e in g.in_edges[root_id])
+
+    # root -> child SUR
+    assert any(e.src == root_id and e.dst == 'u_roof' and e.type == LinkType.SUR for e in g.out_edges[root_id])
+    assert any(e.src == root_id and e.dst == 'u_body' and e.type == LinkType.SUR for e in g.out_edges[root_id])
+    assert any(e.src == root_id and e.dst == 'u_door' and e.type == LinkType.SUR for e in g.out_edges[root_id])
+
+    # Terminals wired to scripts via SUB/SUR
+    assert any(e.src == 't_horz' and e.dst == 'u_roof' and e.type == LinkType.SUB for e in g.in_edges['u_roof'])
+    assert any(e.src == 't_mean' and e.dst == 'u_body' and e.type == LinkType.SUB for e in g.in_edges['u_body'])
+    # Door has OR parts: at least edges present
+    assert any(e.src == 't_vert' and e.dst == 'u_door' and e.type == LinkType.SUB for e in g.in_edges['u_door'])
+    assert any(e.src == 't_mean' and e.dst == 'u_door' and e.type == LinkType.SUB for e in g.in_edges['u_door'])
+
+    # POR sequence roof->body->door
+    assert any(e.src == 'u_roof' and e.dst == 'u_body' and e.type == LinkType.POR for e in g.out_edges['u_roof'])
+    assert any(e.src == 'u_body' and e.dst == 'u_door' and e.type == LinkType.POR for e in g.out_edges['u_body'])
+
 def main():
     """Run all test suites."""
     print("ReCoN Unit Test Runner")
