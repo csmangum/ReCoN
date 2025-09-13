@@ -81,3 +81,29 @@ class TestEngineMetrics:
         t_confirm = steps_to_first_confirm(engine, 'parent')
         assert t_confirm is not None
 
+    def test_stats_reset_clears_metrics(self):
+        g, parent, term = self.build_simple_network()
+        engine = Engine(g)
+        parent.a = 1.0
+        parent.state = State.ACTIVE
+        engine.step(2)
+        # Ensure counters populated
+        assert total_terminal_requests(engine) >= 1
+        assert terminal_request_counts_by_id(engine).get('term', 0) >= 1
+        # Reset and verify stats cleared
+        engine.reset()
+        assert total_terminal_requests(engine) == 0
+        assert terminal_request_counts_by_id(engine) == {}
+        assert engine.stats['first_true_step'] == {}
+        assert engine.stats['first_confirm_step'] == {}
+
+    def test_terminal_request_sent_once(self):
+        g, parent, term = self.build_simple_network()
+        engine = Engine(g)
+        parent.a = 1.0
+        parent.state = State.ACTIVE
+        # Step multiple times; SUR requests should be sent once per parent
+        engine.step(5)
+        assert total_terminal_requests(engine) == 1
+        assert terminal_request_counts_by_id(engine).get('term', 0) == 1
+
