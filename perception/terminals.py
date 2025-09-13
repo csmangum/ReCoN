@@ -9,7 +9,11 @@ images that can be used to recognize simple geometric shapes and patterns.
 import numpy as np
 from .dataset import make_house_scene
 from scipy import ndimage
-import matplotlib.pyplot as plt
+# Lazy import matplotlib only if needed (debug/plotting)
+try:
+    import matplotlib.pyplot as plt  # noqa: F401
+except ImportError:  # pragma: no cover - optional
+    plt = None
 import pickle
 import os
 
@@ -530,8 +534,9 @@ def get_autoencoder(retrain=False):
                 print("Failed to load autoencoder, will train new one")
                 _global_autoencoder.is_trained = False
         
-        # Train if needed
-        if not _global_autoencoder.is_trained or retrain:
+        # Train if needed and enabled via env var
+        train_enabled = os.environ.get('RECON_TRAIN_AE', '0') in ('1','true','True')
+        if (not _global_autoencoder.is_trained or retrain) and train_enabled:
             from .dataset import make_house_scene, make_barn_scene, make_varied_scene
             
             print("Training autoencoder...")
