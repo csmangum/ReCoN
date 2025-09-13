@@ -280,8 +280,6 @@ class TestMessageDelivery:
         unit = Unit('test', UnitType.TERMINAL, state=State.INACTIVE, a=0.0)
         graph.add_unit(unit)
         
-        engine = Engine(graph)
-        
         # Add messages in specific order
         unit.inbox.append(('sender1', Message.REQUEST))
         unit.inbox.append(('sender2', Message.CONFIRM))

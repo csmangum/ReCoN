@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from perception.terminals import (
     simple_filters, terminals_from_image, sift_like_features, blob_detectors,
     geometric_features, advanced_terminals_from_image, SimpleAutoencoder,
-    get_autoencoder, autoencoder_terminals_from_image, comprehensive_terminals_from_image,
+    autoencoder_terminals_from_image, comprehensive_terminals_from_image,
     sample_scene_and_terminals, advanced_sample_scene_and_terminals,
     comprehensive_sample_scene_and_terminals
 )
