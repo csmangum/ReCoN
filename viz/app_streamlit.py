@@ -35,6 +35,20 @@ from perception.terminals import sample_scene_and_terminals
 
 st.set_page_config(layout="wide", page_title="ReCoN Demo")
 
+# Global visual styles
+plt.style.use("seaborn-v0_8-whitegrid")
+st.markdown(
+    """
+    <style>
+    .block-container { padding-top: 0.5rem; padding-bottom: 2rem; }
+    [data-testid="stSidebar"] { background-color: rgba(15, 23, 42, 0.03); }
+    div[data-testid="stMetricValue"] { font-size: 1.3rem; }
+    div[data-testid="stMetricLabel"] { color: #64748b; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 # Global state management
 class ReCoNSimulation:
@@ -250,7 +264,7 @@ with col_scene:
 
     ax_scene.set_xlim(0, 64)
     ax_scene.set_ylim(64, 0)  # Flip y-axis for image coordinates
-    ax_scene.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
+    ax_scene.legend(bbox_to_anchor=(1.05, 1), loc="upper left", frameon=False, fontsize=8)
     ax_scene.set_title("Scene with Attention Path & Terminal Detections")
 
     # Confidence bars for script units
@@ -277,7 +291,7 @@ with col_scene:
             ax_bars.text(
                 activation + 0.01,
                 bar.get_y() + bar.get_height() / 2,
-                ".2f",
+                f"{activation:.2f}",
                 ha="left",
                 va="center",
                 fontsize=9,
@@ -286,14 +300,14 @@ with col_scene:
     ax_bars.grid(True, alpha=0.3)
 
     plt.tight_layout()
-    st.pyplot(fig)
+    st.pyplot(fig, use_container_width=True)
 
     # Scene info
     if "tvals" in st.session_state:
         st.write("**Terminal Activations:**")
         cols = st.columns(3)
         for i, (tid, val) in enumerate(st.session_state.tvals.items()):
-            cols[i].metric(tid, ".3f")
+            cols[i].metric(tid, f"{val:.3f}")
 
 with col_graph:
     st.subheader("🕸️ Network Graph & Messages")
@@ -406,10 +420,13 @@ with col_graph:
             linewidth=3,
         )
 
-    nx.draw_networkx_labels(G, pos, font_size=10, font_weight="bold", ax=ax_graph)
+    nx.draw_networkx_labels(G, pos, font_size=11, font_weight="bold", ax=ax_graph)
 
     # Add edge labels
-    edge_labels = {(u, v): f"{G.edges[(u, v)].get('weight', '')}" for (u, v) in G.edges}
+    edge_labels = {}
+    for (u, v) in G.edges:
+        w = G.edges[(u, v)].get("weight")
+        edge_labels[(u, v)] = f"{w:.1f}" if isinstance(w, (int, float)) else ""
     nx.draw_networkx_edge_labels(G, pos, edge_labels, font_size=8, ax=ax_graph)
 
     ax_graph.set_title(
@@ -608,7 +625,7 @@ with col_graph:
                     )
                     y_pos -= 0.6
 
-    st.pyplot(fig)
+    st.pyplot(fig, use_container_width=True)
 
 # Unit Details and Hover Information
 st.subheader("📊 Unit Details & Hover Information")
@@ -639,7 +656,7 @@ if selected_unit:
         }.get(unit_snap["state"], "⚪")
         st.metric("State", f"{state_color} {unit_snap['state']}")
     with col_activation:
-        st.metric("Activation", ".3f")
+        st.metric("Activation", f"{unit_snap['a']:.3f}")
 
     # Detailed information
     st.write(f"**📋 Details for {selected_unit}:**")
@@ -700,7 +717,7 @@ for uid, unit_data_dict in current_snap["units"].items():
             "Unit": uid,
             "Type": unit_data_dict["kind"],
             "State": unit_data_dict["state"],
-            "Activation": ".3f",
+            "Activation": round(unit_data_dict["a"], 3),
             "Inbox": unit_data_dict["inbox_size"],
             "Outbox": unit_data_dict["outbox_size"],
         }
