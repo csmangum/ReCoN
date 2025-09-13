@@ -19,6 +19,7 @@ from __future__ import annotations
 from typing import Dict
 from .enums import UnitType, LinkType, State, Message
 from .graph import Graph
+from .config import EngineConfig
 
 
 class Engine:
@@ -35,7 +36,7 @@ class Engine:
         t: Current simulation time step
     """
 
-    def __init__(self, g: Graph):
+    def __init__(self, g: Graph, config: EngineConfig | None = None):
         """
         Initialize the ReCoN engine with a network graph.
 
@@ -44,6 +45,7 @@ class Engine:
         """
         self.g = g
         self.t = 0
+        self.config = config or EngineConfig()
         # Track which scripts have already sent their initial SUR requests
         self._sur_requested_parents = set()
         # Metrics/statistics for Day 6 analytics
@@ -105,7 +107,12 @@ class Engine:
         moving messages from sender outboxes to receiver inboxes. This enables
         the asynchronous message passing that coordinates network activity.
         """
-        for u in self.g.units.values():
+        units_iter = (
+            [self.g.units[uid] for uid in sorted(self.g.units)]
+            if self.config.deterministic_order
+            else list(self.g.units.values())
+        )
+        for u in units_iter:
             while u.outbox:
                 receiver_id, message = u.outbox.pop(0)
                 self.send_message(u.id, receiver_id, message)
@@ -248,16 +255,18 @@ class Engine:
             delta: Dictionary of activation deltas from propagation phase
         """
         # First, process incoming messages for all units
-        for uid in self.g.units:
+        unit_ids = sorted(self.g.units) if self.config.deterministic_order else list(self.g.units.keys())
+        for uid in unit_ids:
             self._process_messages(uid)
 
         # Update activations softly
-        for uid, u in self.g.units.items():
-            u.a = max(0.0, min(1.0, u.a + 0.8 * delta[uid]))
+        for uid, u in ([(k, self.g.units[k]) for k in unit_ids] if self.config.deterministic_order else self.g.units.items()):
+            u.a = max(0.0, min(1.0, u.a + self.config.activation_gain * delta[uid]))
 
         # State transitions and message sending
         # Process units in reverse order so children are processed before parents
-        for uid in reversed(list(self.g.units.keys())):
+        ordered_ids = unit_ids
+        for uid in reversed(ordered_ids):
             u = self.g.units[uid]
             if u.kind == UnitType.TERMINAL:
                 # Terminal state machine with message sending
@@ -281,7 +290,7 @@ class Engine:
                         if edge.type == LinkType.SUB:
                             u.outbox.append((edge.dst, Message.CONFIRM))
 
-                elif u.state == State.TRUE and u.a < 0.1:
+                elif u.state == State.TRUE and u.a < self.config.terminal_failure_threshold:
                     if u.state != State.FAILED:
                         u.state = State.FAILED
                         # Send INHIBIT_CONFIRM to parent
@@ -291,7 +300,7 @@ class Engine:
 
             else:  # SCRIPT
                 # Script state machine with message sending
-                if u.state == State.INACTIVE and u.a > 0.1:
+                if u.state == State.INACTIVE and u.a > self.config.script_request_activation_threshold:
                     u.state = State.REQUESTED
                     if uid not in self.stats["first_request_step"]:
                         self.stats["first_request_step"][uid] = self.t
@@ -328,7 +337,7 @@ class Engine:
                     failed = any(
                         self.g.units[c].state == State.FAILED for c in child_ids
                     )
-                    need = max(1, int(0.6 * len(child_ids))) if child_ids else 0
+                    need = max(1, int(self.config.confirmation_ratio * len(child_ids))) if child_ids else 0
 
                     if (
                         child_ids
@@ -357,6 +366,16 @@ class Engine:
                     # Send REQUEST to POR successors
                     for succ_id in self.g.por_successors(u.id):
                         u.outbox.append((succ_id, Message.REQUEST))
+
+                # Optional RET feedback policy: a FAILED successor can demote a CONFIRMED predecessor
+                if self.config.ret_feedback_enabled and u.state == State.CONFIRMED:
+                    # Check incoming RET edges from successors
+                    has_failed_successor = any(
+                        e.type == LinkType.RET and self.g.units.get(e.src) and self.g.units[e.src].state == State.FAILED
+                        for e in self.g.in_edges.get(uid, [])
+                    )
+                    if has_failed_successor:
+                        u.state = State.ACTIVE
 
                 # Handle inhibition from failed children - fail immediately if any child fails
                 failed_children = [

@@ -32,6 +32,19 @@ pip install -r requirements.txt
 streamlit run viz/app_streamlit.py
 ```
 
+### CLI
+
+```bash
+# Run a YAML script for N steps and print a JSON snapshot
+python scripts/recon_cli.py scripts/house.yaml --steps 5 --deterministic --ret-feedback
+
+# Override gate strengths and confirmation ratio
+python scripts/recon_cli.py scripts/house.yaml --sur 0.25 --por 0.6 --confirm-ratio 0.7
+
+# Dump to a file
+python scripts/recon_cli.py scripts/house.yaml --steps 10 --out snapshot.json
+```
+
 Then click **Generate Scene** and **Run** to watch the active perception in action!
 
 ## Repo layout
@@ -82,6 +95,28 @@ If your environment cannot install heavy test dependencies, use the lightweight 
 
 ```bash
 python3 run_tests.py
+```
+
+### Training flag for autoencoder terminals
+
+- Set `RECON_TRAIN_AE=1` to enable on-demand training of the perception autoencoder. By default training is disabled to keep environments lightweight.
+
+### Engine configuration
+
+- Use `EngineConfig` to tune gate strengths and behavior:
+
+```python
+from recon_core.config import EngineConfig
+from recon_core.engine import Engine
+
+cfg = EngineConfig(
+    sur_positive=0.25,
+    por_positive=0.6,
+    confirmation_ratio=0.7,
+    deterministic_order=True,
+    ret_feedback_enabled=True,
+)
+engine = Engine(graph, config=cfg)
 ```
 
 **Metrics (Day 6)**
