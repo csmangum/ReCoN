@@ -145,6 +145,44 @@ tests/
 └── test_engine.py    # Comprehensive test suite
 ```
 
+### Metrics (Day 6)
+
+The engine records runtime metrics to evaluate active perception efficiency and timing. These are exposed via `Engine.snapshot()` under the `stats` key and via convenience helpers in `recon_core.metrics`.
+
+Recorded fields in `engine.stats`:
+
+- `terminal_request_count`: total number of SUR requests sent to TERMINAL units
+- `terminal_request_counts_by_id`: mapping `terminal_id -> count`
+- `first_request_step`: first time step a unit entered `REQUESTED`
+- `first_active_step`: first time step a unit entered `ACTIVE`
+- `first_true_step`: first time step a TERMINAL entered `TRUE`
+- `first_confirm_step`: first time step a SCRIPT entered `CONFIRMED`
+
+Convenience API (`recon_core.metrics`):
+
+```python
+from recon_core.metrics import (
+    binary_precision_recall,
+    steps_to_first_true,
+    steps_to_first_confirm,
+    total_terminal_requests,
+    terminal_request_counts_by_id,
+)
+
+snap = engine.step(5)
+print(snap['stats']['terminal_request_count'])
+print(steps_to_first_confirm(engine, 'u_root'))
+
+# Evaluate predictions
+m = binary_precision_recall([1,0,1], [1,1,0])
+print(m['precision'], m['recall'])
+```
+
+Implementation notes:
+
+- SUR requests to children are issued once per parent script activation episode to avoid over-counting.
+- Timing fields record the first step at which the state transition occurred and remain stable thereafter.
+
 ### Key Classes
 
 #### Unit Class

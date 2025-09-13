@@ -44,6 +44,17 @@ class Engine:
         """
         self.g = g
         self.t = 0
+        # Track which scripts have already sent their initial SUR requests
+        self._sur_requested_parents = set()
+        # Metrics/statistics for Day 6 analytics
+        self.stats = {
+            "terminal_request_count": 0,
+            "terminal_request_counts_by_id": {},  # unit_id -> count
+            "first_request_step": {},            # unit_id -> t when first became REQUESTED
+            "first_active_step": {},             # unit_id -> t when first became ACTIVE
+            "first_true_step": {},               # unit_id -> t when terminal first became TRUE
+            "first_confirm_step": {},            # unit_id -> t when first became CONFIRMED
+        }
 
     def reset(self):
         """
@@ -59,6 +70,16 @@ class Engine:
             u.inbox.clear()
             u.outbox.clear()
         self.t = 0
+        self._sur_requested_parents.clear()
+        # Reset metrics/stats
+        self.stats = {
+            "terminal_request_count": 0,
+            "terminal_request_counts_by_id": {},
+            "first_request_step": {},
+            "first_active_step": {},
+            "first_true_step": {},
+            "first_confirm_step": {},
+        }
 
     # ----- message passing -----
     def send_message(self, sender_id: str, receiver_id: str, message: Message):
@@ -243,6 +264,9 @@ class Engine:
                 # Only process state transitions if no messages have changed the state
                 if u.state == State.INACTIVE and u.a >= u.thresh:
                     u.state = State.TRUE
+                    # Record first TRUE timing
+                    if uid not in self.stats["first_true_step"]:
+                        self.stats["first_true_step"][uid] = self.t
                     # Send CONFIRM to parent (via SUB links)
                     for edge in self.g.out_edges[uid]:
                         if edge.type == LinkType.SUB:
@@ -250,6 +274,8 @@ class Engine:
 
                 elif u.state == State.REQUESTED and u.a >= u.thresh:
                     u.state = State.TRUE
+                    if uid not in self.stats["first_true_step"]:
+                        self.stats["first_true_step"][uid] = self.t
                     # Send CONFIRM to parent (via SUB links)
                     for edge in self.g.out_edges[uid]:
                         if edge.type == LinkType.SUB:
@@ -266,16 +292,30 @@ class Engine:
             else:  # SCRIPT
                 # Script state machine with message sending
                 if u.state == State.INACTIVE and u.a > 0.1:
-                    if u.state != State.REQUESTED:
-                        u.state = State.REQUESTED
-                        # Send REQUEST to children via SUR links
-                        for child_id in self.g.sur_children(u.id):
-                            u.outbox.append((child_id, Message.REQUEST))
+                    u.state = State.REQUESTED
+                    if uid not in self.stats["first_request_step"]:
+                        self.stats["first_request_step"][uid] = self.t
 
                 if u.state == State.REQUESTED:
                     u.state = State.ACTIVE
+                    if uid not in self.stats["first_active_step"]:
+                        self.stats["first_active_step"][uid] = self.t
                     # Children should have been requested when we became REQUESTED
                     # No need to request again
+
+                # Ensure SUR requests are sent exactly once when a script is REQUESTED or ACTIVE
+                if u.state in (State.REQUESTED, State.ACTIVE) and uid not in self._sur_requested_parents:
+                    # Send REQUEST to children via SUR links
+                    for child_id in self.g.sur_children(u.id):
+                        u.outbox.append((child_id, Message.REQUEST))
+                        # Count terminal queries (SUR to TERMINAL children)
+                        child_unit = self.g.units.get(child_id)
+                        if child_unit and child_unit.kind == UnitType.TERMINAL:
+                            self.stats["terminal_request_count"] += 1
+                            self.stats["terminal_request_counts_by_id"][child_id] = (
+                                self.stats["terminal_request_counts_by_id"].get(child_id, 0) + 1
+                            )
+                    self._sur_requested_parents.add(uid)
 
                 # Check if enough children are TRUE to confirm (for both REQUESTED->ACTIVE and existing ACTIVE/CONFIRMED)
                 if u.state in (State.ACTIVE, State.CONFIRMED):
@@ -297,6 +337,8 @@ class Engine:
                         and u.state != State.CONFIRMED
                     ):
                         u.state = State.CONFIRMED
+                        if uid not in self.stats["first_confirm_step"]:
+                            self.stats["first_confirm_step"][uid] = self.t
                         # Send CONFIRM to parent (via SUB links)
                         for edge in self.g.out_edges[uid]:
                             if edge.type == LinkType.SUB:
@@ -383,4 +425,5 @@ class Engine:
                 }
                 for uid, u in self.g.units.items()
             },
+            "stats": self.stats,
         }
