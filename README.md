@@ -42,6 +42,7 @@ recon_core/
   graph.py        # Unit, Edge, Graph model
   engine.py       # propagation + state update rules
   learn.py        # (optional) tiny learning helpers for sur weights
+  metrics.py      # (Day 6) metrics helpers and engine.stats accessors
 perception/
   dataset.py      # synthetic 2D scenes with variety (houses, barns, occlusion)
   terminals.py    # comprehensive terminal features (filters + SIFT + autoencoder)
@@ -77,7 +78,43 @@ Run the comprehensive test suite:
 python -m pytest tests/ -v
 ```
 
-**44 tests** covering:
+If your environment cannot install heavy test dependencies, use the lightweight runner:
+
+```bash
+python3 run_tests.py
+```
+
+**Metrics (Day 6)**
+
+- Engine now records metrics in `engine.snapshot()['stats']`:
+  - `terminal_request_count`: total SUR requests to TERMINALs
+  - `terminal_request_counts_by_id`: per-terminal request counts
+  - `first_true_step`, `first_confirm_step`: timing of key events
+
+- Convenience helpers in `recon_core.metrics`:
+  - `binary_precision_recall(y_true, y_pred)`
+  - `steps_to_first_true(engine, unit_id)`
+  - `steps_to_first_confirm(engine, unit_id)`
+  - `total_terminal_requests(engine)`
+  - `terminal_request_counts_by_id(engine)`
+
+Example:
+
+```python
+from recon_core.metrics import (
+    binary_precision_recall,
+    steps_to_first_true,
+    steps_to_first_confirm,
+    total_terminal_requests,
+)
+
+snap = engine.step(5)
+print(snap['stats']['terminal_request_count'])
+print(steps_to_first_confirm(engine, 'u_root'))
+print(binary_precision_recall([1,0,1],[1,1,0]))
+```
+
+**44+ tests** covering:
 - **18 synthetic scene tests**: Drawing primitives, house/barn generation, occlusion, variations
 - **26 terminal feature tests**: Basic filters, SIFT-like features, autoencoder, integration
 - **Original core tests**: State transitions, message passing, inhibition, temporal sequencing
