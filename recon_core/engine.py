@@ -62,6 +62,23 @@ class Engine:
             "first_confirm_step": {},            # unit_id -> t when first became CONFIRMED
         }
 
+    # ----- helpers -----
+    def _get_units_iter(self):
+        """Return iterable of units honoring deterministic ordering when enabled."""
+        return (
+            [self.g.units[uid] for uid in sorted(self.g.units)]
+            if self.config.deterministic_order
+            else list(self.g.units.values())
+        )
+
+    def _get_unit_ids(self):
+        """Return list of unit IDs honoring deterministic ordering when enabled."""
+        return (
+            sorted(self.g.units)
+            if self.config.deterministic_order
+            else list(self.g.units.keys())
+        )
+
     def reset(self):
         """
         Reset the network to its initial state.
@@ -111,11 +128,7 @@ class Engine:
         moving messages from sender outboxes to receiver inboxes. This enables
         the asynchronous message passing that coordinates network activity.
         """
-        units_iter = (
-            [self.g.units[uid] for uid in sorted(self.g.units)]
-            if self.config.deterministic_order
-            else list(self.g.units.values())
-        )
+        units_iter = self._get_units_iter()
         for u in units_iter:
             while u.outbox:
                 receiver_id, message = u.outbox.pop(0)
@@ -259,12 +272,13 @@ class Engine:
             delta: Dictionary of activation deltas from propagation phase
         """
         # First, process incoming messages for all units
-        unit_ids = sorted(self.g.units) if self.config.deterministic_order else list(self.g.units.keys())
+        unit_ids = self._get_unit_ids()
         for uid in unit_ids:
             self._process_messages(uid)
 
         # Update activations softly
-        for uid, u in ([(k, self.g.units[k]) for k in unit_ids] if self.config.deterministic_order else self.g.units.items()):
+        for uid in unit_ids:
+            u = self.g.units[uid]
             u.a = max(0.0, min(1.0, u.a + self.config.activation_gain * delta[uid]))
 
         # State transitions and message sending
@@ -417,7 +431,7 @@ class Engine:
             self._update_states(delta)
             self._deliver_messages()  # deliver messages after state updates
             # Process newly delivered messages in the same step
-            for uid in self.g.units:
+            for uid in self._get_unit_ids():
                 self._process_messages(uid)
             self.t += 1
         return self.snapshot()
