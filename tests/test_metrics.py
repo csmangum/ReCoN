@@ -67,7 +67,7 @@ class TestEngineMetrics:
     def test_steps_to_events(self):
         g, parent, term = self.build_simple_network()
         engine = Engine(g)
-        # Preload terminal activation to exceed threshold after one step
+        # Preload terminal activation to exceed threshold
         term.a = 0.6
         # Activate parent
         parent.a = 1.0
