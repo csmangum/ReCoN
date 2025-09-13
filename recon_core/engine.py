@@ -9,10 +9,14 @@ and state transitions in hierarchical networks. The engine manages:
 - State machine transitions for both SCRIPT and TERMINAL units
 - Temporal sequencing through POR (predecessor/successor) links
 
-The ReCoN algorithm operates in discrete time steps with three main phases:
-1. Message processing and state updates
-2. Activation propagation via gate functions
-3. Message delivery between units
+Configuration: Engine behavior (gate strengths, thresholds, ordering, optional
+RET-driven feedback) is tunable via `EngineConfig` in `recon_core.config`.
+
+The ReCoN algorithm operates in discrete time steps with four phases:
+1. Propagation: Calculate activation deltas using gate functions
+2. State Update: Process messages and update unit states with soft integration
+3. Message Delivery: Move messages from outboxes to inboxes
+4. Second Message Processing: Process newly delivered messages in the same step
 """
 
 from __future__ import annotations

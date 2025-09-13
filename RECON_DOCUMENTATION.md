@@ -84,13 +84,13 @@ Units communicate via an **asynchronous message system**:
 
 ## Algorithm Overview
 
-### Three-Phase Update Cycle
+### Four-Phase Update Cycle
 
-Each simulation time step consists of three phases:
+Each simulation time step consists of four phases:
 
 #### 1. Propagation Phase
 ```python
-# Calculate activation deltas using gate functions
+# Calculate activation deltas using gate functions (compact arithmetic)
 delta = self._propagate()
 ```
 
@@ -103,12 +103,12 @@ The **compact arithmetic propagation** computes how activation flows through eac
 
 #### 2. State Update Phase
 ```python
-# Process messages and update unit states
+# Process messages and update unit states with soft activation integration
 self._update_states(delta)
 ```
 
 - **Message Processing**: Handle incoming messages (REQUEST, CONFIRM, etc.)
-- **Soft Activation Update**: Apply propagation deltas with damping: `a = clip(a + 0.2*delta, 0, 1)`
+- **Soft Activation Update**: Apply propagation deltas with configurable gain: `a = clip(a + config.activation_gain * delta, 0, 1)` (default gain = 0.8)
 - **State Transitions**: Update unit states based on current activation and message history
 
 #### 3. Message Delivery Phase
@@ -117,7 +117,12 @@ self._update_states(delta)
 self._deliver_messages()
 ```
 
-Messages are moved from sender outboxes to receiver inboxes, enabling asynchronous communication.
+#### 4. Second Message Processing
+```python
+# Process newly delivered messages in the same step
+for uid in self.g.units:
+    self._process_messages(uid)
+```
 
 ## Implementation Architecture
 
@@ -225,7 +230,7 @@ class Graph:
 #### Engine Class
 ```python
 class Engine:
-    def __init__(self, g: Graph):
+    def __init__(self, g: Graph, config: EngineConfig | None = None):
         self.g = g
         self.t = 0
 
@@ -399,7 +404,7 @@ The system includes a lightweight denoising autoencoder for learned feature extr
 ```python
 from perception.terminals import SimpleAutoencoder, get_autoencoder
 
-# Get the global autoencoder (automatically trains on diverse scenes)
+# Get the global autoencoder (training gated by env var RECON_TRAIN_AE)
 ae = get_autoencoder()
 
 # Extract autoencoder features directly
@@ -414,20 +419,23 @@ ae_terminals = autoencoder_terminals_from_image(your_image)
 - **Hidden Layer**: 8 neurons with ReLU activation
 - **Latent**: 4 dimensions with sigmoid activation  
 - **Decoder**: Symmetric reconstruction path
-- **Training**: Denoising reconstruction on diverse synthetic scenes
+- **Training**: Denoising reconstruction on diverse synthetic scenes (enable with env `RECON_TRAIN_AE=1` or pass `retrain=True`)
 - **Features**: Compressed patch representations averaged across image
 
 ## Advanced Features
 
 ### Learning (Optional)
 
-The `learn.py` module provides utilities for learning link weights:
+The `learn.py` module provides online utilities for adapting link weights:
 
 ```python
-from recon_core.learn import update_weights
+from recon_core.learn import online_sur_update, online_generic_update
 
-# Update SUR link weights based on confirmation patterns
-update_weights(engine, learning_rate=0.01)
+# Reinforce SUR links to helpful children when parent confirms
+online_sur_update(graph, parent_id='u_house', lr=0.05)
+
+# Generic per-edge update across SUB/SUR/POR/RET with simple heuristics
+online_generic_update(graph, src_id='u_roof', dst_id='u_body', lr=0.05)
 ```
 
 ### Custom Terminal Units
@@ -475,40 +483,21 @@ def specialized_ae_terminals(img):
 
 ## Testing
 
-The implementation includes comprehensive test coverage with **44 total tests**:
+The implementation includes comprehensive unit tests across engine, graph, learning, and perception components:
 
 ```bash
-# Run all tests
+# Run all tests (if pytest is available)
 python -m pytest tests/ -v
 
-# Run specific test modules
-python -m pytest tests/test_synthetic_scenes.py -v  # 18 scene generation tests
-python -m pytest tests/test_terminals.py -v        # 26 terminal feature tests
-python -m pytest tests/test_engine.py -v           # Core ReCoN engine tests
+# Lightweight runner (no pytest needed)
+python run_tests.py
 ```
 
-### Test Coverage
-
-#### Synthetic Scene Generation Tests (18 tests)
-- **Basic Drawing**: Canvas creation, rectangle/triangle primitives
-- **House Scenes**: Basic generation, scaling, positioning, noise robustness
-- **Barn Scenes**: Structure validation, house/barn discrimination
-- **Occluded Scenes**: Tree/cloud/box occlusion types, vs clean comparison
-- **Varied Scenes**: Randomization, scale ranges, unknown type handling
-
-#### Terminal Feature Tests (26 tests) 
-- **Basic Filters**: Edge detection, uniform images, blank canvas handling
-- **Advanced Features**: SIFT-like, blob detection, geometric analysis
-- **Autoencoder**: Training, encoding, save/load, patch extraction
-- **Integration**: Comprehensive features, convenience functions
-- **Discrimination**: House vs barn, noise robustness, scale invariance
-
-#### Core ReCoN Tests (Original)
-- **State Transitions**: All 8 state changes, edge cases
-- **Message Passing**: Request/confirm/inhibit message flow
-- **Inhibition**: Lateral and feedback inhibition mechanisms  
-- **Temporal Sequencing**: POR/RET link behavior
-- **Failure Propagation**: Error handling and recovery
+Selected pytest modules:
+- `tests/test_engine.py`, `tests/test_state_machine.py`: Core engine behavior
+- `tests/test_compact_arithmetic.py`: Gate arithmetic and propagation
+- `tests/test_graph.py`, `tests/test_message_system.py`, `tests/test_learn.py`: Infrastructure and learning
+- `tests/test_terminals.py`, `tests/test_synthetic_scenes.py`: Perception pipeline
 
 ## Performance Characteristics
 
