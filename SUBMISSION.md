@@ -2,7 +2,7 @@
 
 ## Abstract
 
-Briefly summarize the problem, your approach, and key outcomes (2–4 sentences). Mention ReCoN implementation, interactive visualization, metrics, and main findings.
+This project implements a faithful, self-contained Request Confirmation Network (ReCoN) as introduced in the CoCoNIPS 2015 paper. ReCoN is a spreading-activation graph where scripted units actively request evidence from terminal units and confirm hypotheses through hierarchical composition and temporal sequencing. I built an interactive Streamlit visualization, a YAML→graph compiler for authoring object scripts, and a lightweight perception pipeline for synthetic scenes and terminal features. The system demonstrates active perception: the network selectively computes only what it requests and exposes a clear causal trace for confirmations and failures.
 
 ## Demo & Links
 
@@ -32,14 +32,15 @@ python scripts/recon_cli.py scripts/house.yaml --steps 10 --out snapshot.json
 
 ## Problem Framing
 
-- What representation problem was targeted and why ReCoN (active, selective perception) is a good fit.
-- Constraints, scope, and success criteria you defined for the challenge.
+- Representation problem: recognize composite objects by actively confirming parts and relations rather than passively classifying pixels. ReCoN’s message-driven scripts express “what to look for next” and “when to stop,” which is central to active perception.
+- Scope: focus on controlled 2D synthetic scenes (houses, barns, occlusions) to clearly demonstrate hierarchical parts (AND/OR structure) and ordered checks.
+- Success criteria: a top-level hypothesis (e.g., “house”) drives selective SUR requests to relevant terminals, confirms parts in sequence, and yields a readable causal narrative in the UI.
 
 ## Approach Overview
 
-- ReCoN recap: units (SCRIPT, TERMINAL), 8-state FSM, link types (SUB, SUR, POR, RET), and message alphabet (REQUEST, CONFIRM, WAIT, INHIBIT_*).
-- How “request/confirm” enables active perception vs. passive classification.
-- Design principles: modular core, configurable engine, YAML compiler, visualization.
+- ReCoN recap: SCRIPT and TERMINAL units are tiny finite-state machines (INACTIVE, REQUESTED, WAITING, ACTIVE, TRUE, CONFIRMED, FAILED, SUPPRESSED) connected by typed links—SUB (evidence up), SUR (requests down), POR (temporal precedence), RET (temporal feedback)—and coordinate via REQUEST/CONFIRM/WAIT/INHIBIT messages.
+- Active perception: scripts issue SUR requests only when needed; evidence flows upward via SUB; POR/RET impose ordering so predecessors unlock successors and failures feed back.
+- Design: modular separation (graph, engine, compiler, perception, visualization), deterministic stepping for reproducibility, and a minimal YAML schema to author hierarchies and sequences compiled into graphs.
 
 ## System Architecture
 
@@ -54,6 +55,8 @@ python scripts/recon_cli.py scripts/house.yaml --steps 10 --out snapshot.json
   - `viz/app_streamlit.py` — interactive visualization
 - Optional small diagram of topology and data flow (screenshot acceptable).
 
+End-to-end flow: a YAML script (e.g., `scripts/house.yaml`) is compiled into a `Graph` of `Unit`s and `Edge`s. The `Engine` advances in discrete steps—propagating activation by link type, processing messages, updating states with soft activation dynamics, and delivering messages asynchronously. The Streamlit app renders unit states and messages as the engine steps through a scene, exposing the causal chain of requests and confirmations.
+
 ## Implementation Details
 
 - Compact gate arithmetic (typical contributions):
@@ -65,6 +68,16 @@ python scripts/recon_cli.py scripts/house.yaml --steps 10 --out snapshot.json
 - Engine configuration knobs (confirmation ratio, deterministic order, feedback).
 - Script compilation from `scripts/*.yaml` into graph structure.
 - Key engineering choices and trade-offs.
+ 
+Four-phase step: (1) propagate activation deltas per gate, (2) process messages and update unit states with soft integration and clamping, (3) deliver messages from outboxes to inboxes, (4) process newly delivered messages to capture within-step effects.
+
+State semantics: terminals become TRUE when requested and evidence exceeds threshold; scripts confirm when a sufficient fraction of children are TRUE/CONFIRMED and fail-fast on decisive negative evidence; POR unlocks successors upon confirmation, RET feeds completion/failure backward.
+
+Configuration: confirmation ratio, deterministic iteration order, and temporal feedback are toggled via `EngineConfig` for predictable traces and exploration.
+
+Compiler: SUB/SUR encode part–whole; POR/RET encode ordered checks; OR/AND relations are expressed structurally via multiple children and weights.
+
+Trade-offs: lightweight perception for responsiveness; deterministic stepping for pedagogy over raw performance; emphasis on readability and testability.
 
 ## Dataset & Terminals
 
@@ -72,20 +85,21 @@ python scripts/recon_cli.py scripts/house.yaml --steps 10 --out snapshot.json
 - Terminal features from `perception/terminals.py`:
   - Basic filters, SIFT-like features, blob/geometric features, optional autoencoder.
 - Mapping from features to terminal units used in the demo(s).
+ 
+Rationale: synthetic glyph-like scenes make object structure explicit (e.g., roof above body; door inside body), highlighting ReCoN’s strengths in representing part relations and temporal checks. Terminals provide simple, explainable feature activations; an optional denoising autoencoder can supply compact learned features when enabled.
 
 ## Visualization & UX
 
 - What the Streamlit app shows: graph states, message flow, scene overlays, step/run controls.
 - How the visualization reveals causality (requests, confirmations, failures, sequencing).
+ 
+The UI presents the network graph with nodes colored by state and animated message edges, alongside the current scene and overlays for detected terminals. Controls allow single-step, run/pause, and reset. This pairing makes it easy to see which requests were issued, which evidence arrived, and why a script confirmed or failed.
 
 ## Experiments & Results
 
-- Qualitative traces: step-by-step sequences showing active requests and confirmations.
-- Quantitative metrics (via `recon_core/metrics.py` and engine stats):
-  - `terminal_request_count` and per-terminal counts
-  - `steps_to_first_true`, `steps_to_first_confirm`
-  - Precision/recall example using `binary_precision_recall`
-- Any ablations/toggles (e.g., with/without POR; different thresholds).
+- Qualitative traces: step-by-step sequences on house and barn scenes showing selective SUR requests, confirmations via SUB, and POR-driven sequencing (e.g., roof → body → door).
+- Stressors: occlusion and added noise to illustrate failure cases and how inhibition/ordering affect behavior.
+- Toggles: with/without POR; different confirmation ratios; deterministic vs. nondeterministic ordering.
 
 ## Evaluation vs. CIMC Criteria
 
