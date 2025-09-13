@@ -32,15 +32,11 @@ python scripts/recon_cli.py scripts/house.yaml --steps 10 --out snapshot.json
 
 ## Problem Framing
 
-- Representation problem: recognize composite objects by actively confirming parts and relations rather than passively classifying pixels. ReCoN’s message-driven scripts express “what to look for next” and “when to stop,” which is central to active perception.
-- Scope: focus on controlled 2D synthetic scenes (houses, barns, occlusions) to clearly demonstrate hierarchical parts (AND/OR structure) and ordered checks.
-- Success criteria: a top-level hypothesis (e.g., “house”) drives selective SUR requests to relevant terminals, confirms parts in sequence, and yields a readable causal narrative in the UI.
+Recognizing composite objects requires actively confirming parts and relations rather than passively classifying pixels. ReCoN's message-driven scripts express "what to look for next" and "when to stop," which is central to active perception. The scope focuses on controlled 2D synthetic scenes including houses, barns, and occlusions to clearly demonstrate hierarchical parts with AND/OR structure and ordered checks. Success criteria require that a top-level hypothesis (e.g., "house") drives selective SUR requests to relevant terminals, confirms parts in sequence, and yields a readable causal narrative in the UI.
 
 ## Approach Overview
 
-- ReCoN recap: SCRIPT and TERMINAL units are tiny finite-state machines (INACTIVE, REQUESTED, WAITING, ACTIVE, TRUE, CONFIRMED, FAILED, SUPPRESSED) connected by typed links—SUB (evidence up), SUR (requests down), POR (temporal precedence), RET (temporal feedback)—and coordinate via REQUEST/CONFIRM/WAIT/INHIBIT messages.
-- Active perception: scripts issue SUR requests only when needed; evidence flows upward via SUB; POR/RET impose ordering so predecessors unlock successors and failures feed back.
-- Design: modular separation (graph, engine, compiler, perception, visualization), deterministic stepping for reproducibility, and a minimal YAML schema to author hierarchies and sequences compiled into graphs.
+ReCoN consists of SCRIPT and TERMINAL units that are tiny finite-state machines (INACTIVE, REQUESTED, WAITING, ACTIVE, TRUE, CONFIRMED, FAILED, SUPPRESSED) connected by typed links—SUB (evidence up), SUR (requests down), POR (temporal precedence), RET (temporal feedback)—and coordinate via REQUEST/CONFIRM/WAIT/INHIBIT messages. In active perception, scripts issue SUR requests only when needed; evidence flows upward via SUB; POR/RET impose ordering so predecessors unlock successors and failures feed back. The design features modular separation (graph, engine, compiler, perception, visualization), deterministic stepping for reproducibility, and a minimal YAML schema to author hierarchies and sequences compiled into graphs.
 
 ## System Architecture
 
@@ -53,7 +49,53 @@ python scripts/recon_cli.py scripts/house.yaml --steps 10 --out snapshot.json
   - `perception/dataset.py` — synthetic scenes (house, barn, occlusion, variations)
   - `perception/terminals.py` — terminal features (filters, SIFT-like, autoencoder)
   - `viz/app_streamlit.py` — interactive visualization
-- Optional small diagram of topology and data flow (screenshot acceptable).
+
+```mermaid
+flowchart TD
+    %% Main Pipeline
+    YAML[YAML Script] --> Compiler[Compiler]
+    Compiler --> Graph[Graph<br/>Units + Edges]
+    Graph --> Engine[Engine<br/>Step-by-step]
+    Engine --> Viz[Streamlit<br/>Visualization]
+
+    %% Network Topology
+    subgraph "ReCoN Network Topology"
+        Script[SCRIPT Unit<br/>Orchestration]
+        Terminal[TERMINAL Unit<br/>Perception]
+    end
+
+    %% Link Types
+    Script -->|"SUR<br/>Requests down"| Terminal
+    Terminal -->|"SUB<br/>Evidence up"| Script
+    Script -->|"POR/RET<br/>Temporal"| Script
+
+    %% Styling
+    classDef pipeline fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
+    classDef network fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px
+    classDef links stroke:#FF5722,stroke-width:3px
+
+    class YAML,Compiler,Graph,Engine,Viz pipeline
+    class Script,Terminal network
+    class Script,Terminal links
+
+    %% Legend
+    subgraph "Link Types Legend"
+        direction LR
+        SUB_L[SUB: Evidence up<br/>child→parent]
+        SUR_L[SUR: Requests down<br/>parent→child]
+        POR_L[POR: Precedence<br/>predecessor→successor]
+        RET_L[RET: Feedback<br/>successor→predecessor]
+    end
+
+    subgraph "Message Flow"
+        direction LR
+        REQUEST[REQUEST]
+        WAIT[WAIT]
+        CONFIRM[CONFIRM]
+        REQUEST --> WAIT --> CONFIRM
+        INHIBIT_R[INHIBIT_REQUEST] --> INHIBIT_C[INHIBIT_CONFIRM]
+    end
+```
 
 End-to-end flow: a YAML script (e.g., `scripts/house.yaml`) is compiled into a `Graph` of `Unit`s and `Edge`s. The `Engine` advances in discrete steps—propagating activation by link type, processing messages, updating states with soft activation dynamics, and delivering messages asynchronously. The Streamlit app renders unit states and messages as the engine steps through a scene, exposing the causal chain of requests and confirmations.
 
@@ -68,16 +110,68 @@ End-to-end flow: a YAML script (e.g., `scripts/house.yaml`) is compiled into a `
 - Engine configuration knobs (confirmation ratio, deterministic order, feedback).
 - Script compilation from `scripts/*.yaml` into graph structure.
 - Key engineering choices and trade-offs.
- 
-Four-phase step: (1) propagate activation deltas per gate, (2) process messages and update unit states with soft integration and clamping, (3) deliver messages from outboxes to inboxes, (4) process newly delivered messages to capture within-step effects.
 
-State semantics: terminals become TRUE when requested and evidence exceeds threshold; scripts confirm when a sufficient fraction of children are TRUE/CONFIRMED and fail-fast on decisive negative evidence; POR unlocks successors upon confirmation, RET feeds completion/failure backward.
+### Four-phase step
 
-Configuration: confirmation ratio, deterministic iteration order, and temporal feedback are toggled via `EngineConfig` for predictable traces and exploration.
+The ReCoN engine operates in discrete time steps with a carefully orchestrated four-phase algorithm that separates concerns and enables predictable, deterministic behavior. Each phase serves a distinct purpose in the spreading-activation dynamics:
 
-Compiler: SUB/SUR encode part–whole; POR/RET encode ordered checks; OR/AND relations are expressed structurally via multiple children and weights.
+**Phase 1 - Propagation**: For each link type (SUB, SUR, POR, RET), the engine evaluates "gate functions" that determine how much activation flows from source to destination units. For example, a CONFIRMED unit sends positive deltas (+0.5) through POR links to unlock successors, while a FAILED unit sends negative deltas (-0.5) through RET links to propagate failure backward. These deltas are summed by destination unit, creating a unified activation change signal.
 
-Trade-offs: lightweight perception for responsiveness; deterministic stepping for pedagogy over raw performance; emphasis on readability and testability.
+**Phase 2 - State Update**: Messages are processed first (REQUEST boosts activation and may trigger REQUESTED state, CONFIRM provides additional activation boosts, WAIT forces WAITING state, inhibition messages reduce activation and can cause state transitions). Then activation levels are updated softly using the formula: `new_a = clamp(0, 1, old_a + gain * delta)`. Finally, state machines run - terminals become TRUE when requested and activation exceeds thresholds, scripts orchestrate children and manage sequences through POR/RET links.
+
+**Phase 3 - Message Delivery**: All messages queued in unit outboxes during Phase 2 are transferred to recipient inboxes. This asynchronous mechanism prevents infinite loops and enables units to react to multiple simultaneous events.
+
+**Phase 4 - Second Message Processing**: Any messages delivered in Phase 3 are immediately processed, allowing "within-step effects" where one unit's state change can immediately influence others in the same time step. This captures cascading effects like a terminal confirmation triggering a script confirmation that unlocks a successor.
+
+### State semantics
+
+The state semantics define how different unit types respond to activation and coordinate through the network:
+
+**Terminal Units**: These leaf nodes interface with perception. They remain INACTIVE until receiving a REQUEST message, then transition to TRUE when their activation exceeds a threshold (default 0.1). Once TRUE, they send CONFIRM messages to parents via SUB links. If activation drops below a failure threshold, they transition to FAILED and send INHIBIT_CONFIRM messages. This models feature detection that requires both top-down attention (REQUEST) and bottom-up evidence.
+
+**Script Units**: These orchestration nodes coordinate child activities. They become REQUESTED when activation exceeds a threshold, then ACTIVE where they send REQUEST messages to children via SUR links. They CONFIRM when a configurable ratio (default 0.6) of children are TRUE/CONFIRMED, implementing AND/OR logic through structural composition rather than explicit operators. Fail-fast behavior means any FAILED child immediately causes the script to FAIL and send INHIBIT_CONFIRM to parents.
+
+**POR (Precedence) Links**: When a script CONFIRMS, it sends REQUEST messages through POR links to successor units, enforcing temporal ordering (e.g., detect roof before body before door). This creates sequential dependencies where predecessors must complete before successors activate.
+
+**RET (Feedback) Links**: When successors FAIL, they send negative activation through RET links to demote CONFIRMED predecessors back to ACTIVE state (if ret_feedback_enabled=True). This allows failed later steps to restart earlier ones, modeling temporal dependencies where sequence violations require re-evaluation.
+
+### Configuration
+
+The `EngineConfig` class exposes behavioral knobs without changing core logic:
+
+**Confirmation Ratio** (default 0.6): Controls how many children must be TRUE/CONFIRMED for a script to confirm. Higher values (→1.0) make confirmation more stringent, lower values (→0.0) make it more permissive. This enables exploring different AND/OR semantics - a ratio of 1.0 requires all children, 0.0 requires none.
+
+**Deterministic Order** (default True): When enabled, units are processed in sorted ID order rather than dictionary iteration order. This ensures reproducible traces across runs, critical for debugging and pedagogy. When disabled, allows exploring non-deterministic behaviors.
+
+**RET Feedback** (default False): Enables/disables temporal feedback where FAILED successors can demote CONFIRMED predecessors. When enabled, creates tighter temporal coupling where sequence failures propagate backward. When disabled, predecessors remain confirmed even if successors fail, modeling more independent subprocesses.
+
+Additional knobs include gate strengths (sub_positive=1.0, por_positive=0.5, etc.), activation gain (0.8), and thresholds, allowing fine-tuning of network dynamics for different scenarios.
+
+### Compiler
+
+The YAML compiler translates declarative scripts into network topology:
+
+**SUB/SUR Links**: Encode part-whole relationships. Every script-terminal pair gets bidirectional links: SUR (script→terminal) for top-down requests, SUB (terminal→script) for bottom-up evidence. Script-script hierarchies use the same pattern, creating trees where activation flows bidirectionally.
+
+**POR/RET Links**: Encode temporal sequences. A YAML `sequence: [roof, body, door]` creates POR edges (roof→body→door) for forward propagation and RET edges (door→body→roof) for backward feedback. This enforces ordering while allowing feedback loops.
+
+**Structural Logic**: AND/OR relationships emerge from structure rather than explicit operators. A script with multiple children and confirmation_ratio=1.0 acts as AND (all required), while confirmation_ratio<1.0 acts as OR (some sufficient). Multiple weighted edges allow fine-grained control - a child with weight 2.0 counts as two confirmations.
+
+**Auto-creation**: Missing terminals are created automatically, and the compiler handles both symbolic sequences ("roof then body") and direct child references, making scripts flexible yet structured.
+
+### Trade-offs
+
+The implementation prioritizes pedagogical value over optimization:
+
+**Lightweight Perception**: Simple terminal features (filters, SIFT-like, geometric) run quickly without heavy computation. This favors responsiveness and understandability over accuracy, making the active perception paradigm clear through fast iteration rather than complex feature extraction.
+
+**Deterministic Stepping**: Fixed four-phase algorithm with configurable deterministic ordering trades performance (could parallelize phases) for predictability. Every run produces identical traces, enabling step-by-step debugging and causal analysis - essential for understanding the algorithm but slower than optimized async execution.
+
+**Readability Emphasis**: Clean separation (engine handles dynamics, graph handles structure, compiler handles authoring), comprehensive docstrings, and modular design prioritize maintainability. YAML scripts are declarative and human-readable, while Python code uses clear naming and single-responsibility functions.
+
+**Testability Focus**: Extensive test suite covers edge cases, synthetic scenes enable controlled experimentation, and configuration knobs allow systematic parameter sweeps. This makes the system reliable and scientifically reproducible, though it adds complexity that pure performance implementations might avoid.
+
+These design choices create a system that's easier to understand, debug, and extend than raw performance would allow, making it ideal for research and education while still demonstrating practical active perception capabilities.
 
 ## Dataset & Terminals
 
@@ -85,14 +179,14 @@ Trade-offs: lightweight perception for responsiveness; deterministic stepping fo
 - Terminal features from `perception/terminals.py`:
   - Basic filters, SIFT-like features, blob/geometric features, optional autoencoder.
 - Mapping from features to terminal units used in the demo(s).
- 
-Rationale: synthetic glyph-like scenes make object structure explicit (e.g., roof above body; door inside body), highlighting ReCoN’s strengths in representing part relations and temporal checks. Terminals provide simple, explainable feature activations; an optional denoising autoencoder can supply compact learned features when enabled.
+
+Rationale: synthetic glyph-like scenes make object structure explicit (e.g., roof above body; door inside body), highlighting ReCoN's strengths in representing part relations and temporal checks. Terminals provide simple, explainable feature activations; an optional denoising autoencoder can supply compact learned features when enabled.
 
 ## Visualization & UX
 
 - What the Streamlit app shows: graph states, message flow, scene overlays, step/run controls.
 - How the visualization reveals causality (requests, confirmations, failures, sequencing).
- 
+
 The UI presents the network graph with nodes colored by state and animated message edges, alongside the current scene and overlays for detected terminals. Controls allow single-step, run/pause, and reset. This pairing makes it easy to see which requests were issued, which evidence arrived, and why a script confirmed or failed.
 
 ## Experiments & Results
@@ -152,8 +246,3 @@ engine = Engine(graph, config=cfg)
 
 - "Request Confirmation Networks for Active Object Recognition" (CoCoNIPS 2015). See `CoCoNIPS_2015_paper_6.pdf`.
 - Libraries and tools used (Streamlit, NumPy, etc.).
-
-## Statement of Originality
-
-This submission reflects my original work. External sources are properly attributed. All code and assets included are licensed or created by me for this challenge.
-
