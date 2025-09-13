@@ -1,9 +1,7 @@
 # Request Confirmation Network (ReCoN) Implementation
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/USER/REPO/blob/main/ReCoN_Key_Features_Demo.ipynb)
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/USER/REPO/HEAD?labpath=ReCoN_Key_Features_Demo.ipynb)
-
-Note: Replace USER/REPO in the badge links with your GitHub repo slug after pushing.
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/csmangum/ReCoN/blob/main/ReCoN_Key_Features_Demo.ipynb)
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/csmangum/ReCoN/HEAD?labpath=ReCoN_Key_Features_Demo.ipynb)
 
 A faithful, comprehensive **Request Confirmation Network** (ReCoN) implementation based on the CoCoNIPS 2015 paper. Features active perception, hierarchical recognition, and temporal sequencing for intelligent object recognition.
 
