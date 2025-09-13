@@ -85,7 +85,7 @@ def online_generic_update(g: Graph, src_id: str, dst_id: str, lr: float = 0.05):
     elif edge.type == LinkType.RET:
         if dst.state.name == 'CONFIRMED' and src.state.name == 'CONFIRMED':
             target = 1.0
-        elif src.state.name == 'FAILED':
+        elif dst.state.name == 'FAILED':
             target = 0.0
 
     if target is None:
