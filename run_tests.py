@@ -332,4 +332,72 @@ def main():
         return 1
 
 if __name__ == "__main__":
+    # Inject Day 6 metrics tests into the runner without pytest
+    from recon_core.metrics import binary_precision_recall
+    from recon_core.enums import UnitType, State, LinkType
+    from recon_core.graph import Graph, Unit, Edge
+    from recon_core.engine import Engine
+
+    def test_metrics_binary():
+        m = binary_precision_recall([1, 0, 1, 0, 1], [1, 1, 0, 0, 1])
+        assert abs(m["precision"] - (2/3)) < 1e-9
+        assert abs(m["recall"] - (2/3)) < 1e-9
+        assert m["tp"] == 2 and m["fp"] == 1 and m["tn"] == 1 and m["fn"] == 1
+
+    def test_metrics_engine_counters():
+        g = Graph()
+        parent = Unit('parent', UnitType.SCRIPT)
+        term = Unit('term', UnitType.TERMINAL, thresh=0.5)
+        g.add_unit(parent)
+        g.add_unit(term)
+        g.add_edge(Edge('term', 'parent', LinkType.SUB))
+        g.add_edge(Edge('parent', 'term', LinkType.SUR))
+        engine = Engine(g)
+        parent.a = 1.0
+        parent.state = State.ACTIVE
+        engine.step(2)
+        snap = engine.snapshot()
+        assert snap['stats']['terminal_request_count'] >= 1
+        assert snap['stats']['terminal_request_counts_by_id'].get('term', 0) >= 1
+
+    # Append metrics tests to suites
+    def _append_metrics_tests():
+        global main
+        original_main = main
+
+        def wrapped_main():
+            print("ReCoN Unit Test Runner")
+            print("=" * 50)
+            # Recreate suites here to inject new tests at the end
+            suites = [
+                ([test_basic_functionality], "Basic Functionality Tests"),
+                ([test_graph_operations], "Graph Operations Tests"),
+                ([test_engine_operations], "Engine Operations Tests"),
+                ([test_message_system], "Message System Tests"),
+                ([test_learning_system], "Learning System Tests"),
+                ([test_state_machine], "State Machine Tests"),
+                ([test_integration_scenario], "Integration Tests"),
+                ([test_script_compiler], "Compiler Tests"),
+                ([test_metrics_binary, test_metrics_engine_counters], "Day 6 Metrics Tests"),
+            ]
+
+            total_passed = 0
+            total_failed = 0
+            for test_functions, suite_name in suites:
+                passed, failed = run_test_suite(test_functions, suite_name)
+                total_passed += passed
+                total_failed += failed
+
+            print(f"\n{'=' * 50}")
+            print(f"TOTAL RESULTS: {total_passed} passed, {total_failed} failed")
+            if total_failed == 0:
+                print("🎉 All tests passed!")
+                return 0
+            else:
+                print(f"❌ {total_failed} tests failed")
+                return 1
+
+        main = wrapped_main
+
+    _append_metrics_tests()
     sys.exit(main())

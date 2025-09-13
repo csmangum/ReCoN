@@ -27,3 +27,20 @@ except Exception:  # pragma: no cover - optional import safety
 	compile_from_yaml = None
 	compile_from_file = None
 	compile_from_dict = None
+
+# Day 6: expose metrics utilities
+try:
+	from .metrics import (
+		binary_precision_recall,
+		steps_to_first_confirm,
+		steps_to_first_true,
+		total_terminal_requests,
+		terminal_request_counts_by_id,
+	)
+except Exception:  # pragma: no cover
+	# Metrics are optional; allow import without failing
+	binary_precision_recall = None
+	steps_to_first_confirm = None
+	steps_to_first_true = None
+	total_terminal_requests = None
+	terminal_request_counts_by_id = None
