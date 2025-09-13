@@ -12,7 +12,7 @@ from scipy import ndimage
 # Lazy import matplotlib only if needed (debug/plotting)
 try:
     import matplotlib.pyplot as plt  # noqa: F401
-except Exception:  # pragma: no cover - optional
+except ImportError:  # pragma: no cover - optional
     plt = None
 import pickle
 import os
