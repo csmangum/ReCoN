@@ -15,23 +15,24 @@ Enhanced interface includes:
 - Detailed unit information panels
 """
 
-import streamlit as st
+import os
+import sys
+import time
+
+import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
-import matplotlib.pyplot as plt
-import sys
-import os
-import time
+import streamlit as st
+
+from perception.terminals import sample_scene_and_terminals
+from recon_core.engine import Engine
+from recon_core.enums import LinkType, State, UnitType
+from recon_core.graph import Edge, Graph, Unit
 
 # Add project root to Python path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
-
-from recon_core.enums import UnitType, LinkType, State, Message
-from recon_core.graph import Graph, Unit, Edge
-from recon_core.engine import Engine
-from perception.terminals import sample_scene_and_terminals
 
 st.set_page_config(layout="wide", page_title="ReCoN Demo")
 
@@ -67,8 +68,8 @@ class ReCoNSimulation:
         """Initialize the house recognition network topology."""
         g = Graph()
         # script units
-        for uid in ["u_root", "u_roof", "u_body", "u_door"]:
-            g.add_unit(Unit(uid, UnitType.SCRIPT, state=State.INACTIVE, a=0.0))
+        for unit_id in ["u_root", "u_roof", "u_body", "u_door"]:
+            g.add_unit(Unit(unit_id, UnitType.SCRIPT, state=State.INACTIVE, a=0.0))
         # terminals
         for tid in ["t_mean", "t_vert", "t_horz"]:
             g.add_unit(
@@ -112,7 +113,7 @@ class ReCoNSimulation:
         # Capture messages before stepping
         messages_this_step = []
         for unit in self.graph.units.values():
-            for receiver_id, message in unit.outbox:
+            for receiver_id, message in unit.outbox.items():
                 messages_this_step.append((unit.id, receiver_id, message))
 
         # Step the simulation
@@ -162,9 +163,9 @@ st.sidebar.header("🎛️ Controls")
 col_gen, col_ctrl = st.sidebar.columns(2)
 with col_gen:
     if st.button("🎲 Generate Scene", type="primary"):
-        img, tvals = st.session_state.sim.generate_scene()
+        img, terminal_vals = st.session_state.sim.generate_scene()
         st.session_state.img = img
-        st.session_state.tvals = tvals
+        st.session_state.tvals = terminal_vals
         st.session_state.snap = st.session_state.sim.engine.snapshot()
         st.rerun()
 
@@ -264,7 +265,9 @@ with col_scene:
 
     ax_scene.set_xlim(0, 64)
     ax_scene.set_ylim(64, 0)  # Flip y-axis for image coordinates
-    ax_scene.legend(bbox_to_anchor=(1.05, 1), loc="upper left", frameon=False, fontsize=8)
+    ax_scene.legend(
+        bbox_to_anchor=(1.05, 1), loc="upper left", frameon=False, fontsize=8
+    )
     ax_scene.set_title("Scene with Attention Path & Terminal Detections")
 
     # Confidence bars for script units
@@ -272,11 +275,11 @@ with col_scene:
     activations = []
     labels = []
 
-    for uid in script_units:
-        if uid in st.session_state.sim.graph.units:
-            unit = st.session_state.sim.graph.units[uid]
+    for script_id in script_units:
+        if script_id in st.session_state.sim.graph.units:
+            unit = st.session_state.sim.graph.units[script_id]
             activations.append(unit.a)
-            labels.append(uid.replace("u_", ""))
+            labels.append(script_id.replace("u_", ""))
 
     if activations:
         bars = ax_bars.barh(
@@ -350,10 +353,10 @@ with col_graph:
     }
 
     # Add nodes with enhanced styling
-    for uid, unit in st.session_state.sim.graph.units.items():
+    for unit_id, unit in st.session_state.sim.graph.units.items():
         state_name = unit.state.name
         G.add_node(
-            uid,
+            unit_id,
             color=state_colors[state_name],
             size=state_sizes[state_name],
             activation=round(unit.a, 2),
@@ -368,12 +371,12 @@ with col_graph:
         "RET": {"color": "#fdae6b", "style": "dotted", "alpha": 0.5},
     }
 
-    for src, edges in st.session_state.sim.graph.out_edges.items():
+    for src_id, edges in st.session_state.sim.graph.out_edges.items():
         for e in edges:
             style = edge_styles[e.type.name]
             G.add_edge(
-                e.src,
-                e.dst,
+                e.src_id,
+                e.dst_id,
                 color=style["color"],
                 style=style["style"],
                 alpha=style["alpha"],
@@ -381,13 +384,15 @@ with col_graph:
             )
 
     # Draw the graph
-    node_colors = [G.nodes[n]["color"] for n in G.nodes]
-    node_sizes = [G.nodes[n]["size"] for n in G.nodes]
+    node_colors = [G.nodes[n]["color"] for n in G.nodes()]
+    node_sizes = [G.nodes[n]["size"] for n in G.nodes()]
 
     # Draw edges by type
     for link_type, style in edge_styles.items():
         edges_of_type = [
-            (u, v) for u, v, d in G.edges(data=True) if d.get("style") == style["style"]
+            (u, v)
+            for u, v, d in G.edges(data=True)
+            if d.get("style") == style["style"]
         ]
         if edges_of_type:
             nx.draw_networkx_edges(
@@ -407,13 +412,14 @@ with col_graph:
         G, pos, node_color=node_colors, node_size=node_sizes, ax=ax_graph
     )
 
+    node_sizes = [G.nodes[n]["size"] for n in G.nodes()]
     # Highlight selected node
     if selected_unit in pos:
         sel_x, sel_y = pos[selected_unit]
         ax_graph.scatter(
             sel_x,
             sel_y,
-            s=node_sizes[list(G.nodes).index(selected_unit)] * 1.5,
+            s=node_sizes[list(G.nodes()).index(selected_unit)] * 1.5,
             c="yellow",
             alpha=0.8,
             edgecolors="black",
@@ -424,7 +430,7 @@ with col_graph:
 
     # Add edge labels
     edge_labels = {}
-    for (u, v) in G.edges:
+    for u, v in G.edges():
         w = G.edges[(u, v)].get("weight")
         edge_labels[(u, v)] = f"{w:.1f}" if isinstance(w, (int, float)) else ""
     nx.draw_networkx_edge_labels(G, pos, edge_labels, font_size=8, ax=ax_graph)
@@ -710,11 +716,11 @@ if selected_unit:
 # Summary table for all units
 st.write("**📈 All Units Overview:**")
 unit_data = []
-for uid, unit_data_dict in current_snap["units"].items():
-    unit = st.session_state.sim.graph.units[uid]
+for unit_id, unit_data_dict in current_snap["units"].items():
+    unit = st.session_state.sim.graph.units[unit_id]
     unit_data.append(
         {
-            "Unit": uid,
+            "Unit": unit_id,
             "Type": unit_data_dict["kind"],
             "State": unit_data_dict["state"],
             "Activation": round(unit_data_dict["a"], 3),

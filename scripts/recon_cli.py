@@ -67,7 +67,7 @@ def main() -> int:
     }
 
     if args.out:
-        with open(args.out, "w") as f:
+        with open(args.out, "w", encoding="utf-8") as f:
             json.dump(summary, f, indent=2)
     else:
         print(json.dumps(summary, indent=2))

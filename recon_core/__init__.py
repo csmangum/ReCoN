@@ -22,7 +22,7 @@ from .engine import Engine
 # Day 4: expose compiler utilities
 try:
 	from .compiler import compile_from_yaml, compile_from_file, compile_from_dict
-except Exception:  # pragma: no cover - optional import safety
+except ImportError:  # pragma: no cover - optional import safety
 	# Allow core to be imported even if optional deps (pyyaml) missing
 	compile_from_yaml = None
 	compile_from_file = None
@@ -37,7 +37,7 @@ try:
 		total_terminal_requests,
 		terminal_request_counts_by_id,
 	)
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
 	# Metrics are optional; allow import without failing
 	binary_precision_recall = None
 	steps_to_first_confirm = None

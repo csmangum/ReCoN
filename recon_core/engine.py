@@ -20,10 +20,12 @@ The ReCoN algorithm operates in discrete time steps with four phases:
 """
 
 from __future__ import annotations
+
 from typing import Dict
-from .enums import UnitType, LinkType, State, Message
-from .graph import Graph
+
 from .config import EngineConfig
+from .enums import LinkType, Message, State, UnitType
+from .graph import Graph
 
 
 class Engine:
@@ -56,10 +58,10 @@ class Engine:
         self.stats = {
             "terminal_request_count": 0,
             "terminal_request_counts_by_id": {},  # unit_id -> count
-            "first_request_step": {},            # unit_id -> t when first became REQUESTED
-            "first_active_step": {},             # unit_id -> t when first became ACTIVE
-            "first_true_step": {},               # unit_id -> t when terminal first became TRUE
-            "first_confirm_step": {},            # unit_id -> t when first became CONFIRMED
+            "first_request_step": {},  # unit_id -> t when first became REQUESTED
+            "first_active_step": {},  # unit_id -> t when first became ACTIVE
+            "first_true_step": {},  # unit_id -> t when terminal first became TRUE
+            "first_confirm_step": {},  # unit_id -> t when first became CONFIRMED
         }
 
     # ----- helpers -----
@@ -152,7 +154,7 @@ class Engine:
         messages = u.inbox.copy()
         u.inbox.clear()
 
-        for sender_id, message in messages:
+        for _, message in messages:
             if message == Message.REQUEST:
                 if u.state == State.INACTIVE:
                     u.state = State.REQUESTED
@@ -308,7 +310,10 @@ class Engine:
                         if edge.type == LinkType.SUB:
                             u.outbox.append((edge.dst, Message.CONFIRM))
 
-                elif u.state == State.TRUE and u.a < self.config.terminal_failure_threshold:
+                elif (
+                    u.state == State.TRUE
+                    and u.a < self.config.terminal_failure_threshold
+                ):
                     if u.state != State.FAILED:
                         u.state = State.FAILED
                         # Send INHIBIT_CONFIRM to parent
@@ -318,7 +323,10 @@ class Engine:
 
             else:  # SCRIPT
                 # Script state machine with message sending
-                if u.state == State.INACTIVE and u.a > self.config.script_request_activation_threshold:
+                if (
+                    u.state == State.INACTIVE
+                    and u.a > self.config.script_request_activation_threshold
+                ):
                     u.state = State.REQUESTED
                     if uid not in self.stats["first_request_step"]:
                         self.stats["first_request_step"][uid] = self.t
@@ -331,7 +339,10 @@ class Engine:
                     # No need to request again
 
                 # Ensure SUR requests are sent exactly once when a script is REQUESTED or ACTIVE
-                if u.state in (State.REQUESTED, State.ACTIVE) and uid not in self._sur_requested_parents:
+                if (
+                    u.state in (State.REQUESTED, State.ACTIVE)
+                    and uid not in self._sur_requested_parents
+                ):
                     # Send REQUEST to children via SUR links
                     for child_id in self.g.sur_children(u.id):
                         u.outbox.append((child_id, Message.REQUEST))
@@ -340,7 +351,10 @@ class Engine:
                         if child_unit and child_unit.kind == UnitType.TERMINAL:
                             self.stats["terminal_request_count"] += 1
                             self.stats["terminal_request_counts_by_id"][child_id] = (
-                                self.stats["terminal_request_counts_by_id"].get(child_id, 0) + 1
+                                self.stats["terminal_request_counts_by_id"].get(
+                                    child_id, 0
+                                )
+                                + 1
                             )
                     self._sur_requested_parents.add(uid)
 
@@ -355,7 +369,11 @@ class Engine:
                     failed = any(
                         self.g.units[c].state == State.FAILED for c in child_ids
                     )
-                    need = max(1, int(self.config.confirmation_ratio * len(child_ids))) if child_ids else 0
+                    need = (
+                        max(1, int(self.config.confirmation_ratio * len(child_ids)))
+                        if child_ids
+                        else 0
+                    )
 
                     if (
                         child_ids
@@ -389,7 +407,9 @@ class Engine:
                 if self.config.ret_feedback_enabled and u.state == State.CONFIRMED:
                     # Check incoming RET edges from successors
                     has_failed_successor = any(
-                        e.type == LinkType.RET and self.g.units.get(e.src) and self.g.units[e.src].state == State.FAILED
+                        e.type == LinkType.RET
+                        and self.g.units.get(e.src)
+                        and self.g.units[e.src].state == State.FAILED
                         for e in self.g.in_edges.get(uid, [])
                     )
                     if has_failed_successor:

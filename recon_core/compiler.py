@@ -36,11 +36,12 @@ Notes:
 
 from __future__ import annotations
 
-from typing import Dict, Any, List
+from typing import Any, Dict, List
+
 import yaml
 
-from .enums import UnitType, LinkType, State
-from .graph import Graph, Unit, Edge
+from .enums import LinkType, State, UnitType
+from .graph import Edge, Graph, Unit
 
 
 def _ensure_unit(g: Graph, unit_id: str, kind: UnitType) -> Unit:
@@ -64,14 +65,14 @@ def compile_from_dict(spec: Dict[str, Any]) -> Graph:
     g = Graph()
 
     # Root script
-    obj_name = spec.get('object', 'root')
+    obj_name = spec.get("object", "root")
     root_id = f"u_{obj_name}"
     _ensure_unit(g, root_id, UnitType.SCRIPT)
 
     # Children scripts and terminals
     child_name_to_unit: Dict[str, str] = {}
-    for child in spec.get('children', []) or []:
-        cid = child.get('id')
+    for child in spec.get("children", []) or []:
+        cid = child.get("id")
         if not cid:
             # skip ill-formed entry
             continue
@@ -84,16 +85,16 @@ def compile_from_dict(spec: Dict[str, Any]) -> Graph:
         g.add_edge(Edge(root_id, script_id, LinkType.SUR, w=1.0))
 
         # Parts -> script
-        parts: List[str] = child.get('parts', []) or []
+        parts: List[str] = child.get("parts", []) or []
         for tname in parts:
-            term_id = tname if tname.startswith('t_') else f"t_{tname}"
+            term_id = tname if tname.startswith("t_") else f"t_{tname}"
             _ensure_unit(g, term_id, UnitType.TERMINAL)
             # terminal -> script (SUB) and script -> terminal (SUR)
             g.add_edge(Edge(term_id, script_id, LinkType.SUB, w=1.0))
             g.add_edge(Edge(script_id, term_id, LinkType.SUR, w=1.0))
 
     # Sequence wiring using POR between child scripts
-    sequence = spec.get('sequence', []) or []
+    sequence = spec.get("sequence", []) or []
     # Map sequence entries to ordered child script IDs; include all mentions per step
     seq_units: List[str] = []
     for step in sequence:
@@ -130,7 +131,6 @@ def compile_from_yaml(yaml_text: str) -> Graph:
 
 def compile_from_file(path: str) -> Graph:
     """Compile from a YAML file path into a `Graph`."""
-    with open(path, 'r') as f:
+    with open(path, "r", encoding="utf-8") as f:
         txt = f.read()
     return compile_from_yaml(txt)
-
