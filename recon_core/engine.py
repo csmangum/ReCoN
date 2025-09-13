@@ -292,10 +292,9 @@ class Engine:
             else:  # SCRIPT
                 # Script state machine with message sending
                 if u.state == State.INACTIVE and u.a > 0.1:
-                    if u.state != State.REQUESTED:
-                        u.state = State.REQUESTED
-                        if uid not in self.stats["first_request_step"]:
-                            self.stats["first_request_step"][uid] = self.t
+                    u.state = State.REQUESTED
+                    if uid not in self.stats["first_request_step"]:
+                        self.stats["first_request_step"][uid] = self.t
 
                 if u.state == State.REQUESTED:
                     u.state = State.ACTIVE
