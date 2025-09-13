@@ -47,7 +47,7 @@ def build_config(args: argparse.Namespace) -> EngineConfig:
         cfg.confirmation_ratio = float(args.confirm_ratio)
     if args.deterministic:
         cfg.deterministic_order = True
-    cfg.ret_feedback_enabled = bool(args.ret_feedback)
+    cfg.ret_feedback_enabled = args.ret_feedback
     return cfg
 
 
