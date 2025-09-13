@@ -376,7 +376,7 @@ class Engine:
                 uid: {
                     "state": u.state.name,
                     "a": u.a,
-                    "kind": u.kind.name,
+                    "kind": u.kind.name if u.kind else "UNKNOWN",
                     "meta": u.meta,
                     "inbox_size": len(u.inbox),
                     "outbox_size": len(u.outbox),
