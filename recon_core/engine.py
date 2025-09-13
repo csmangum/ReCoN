@@ -44,6 +44,17 @@ class Engine:
         """
         self.g = g
         self.t = 0
+        # Day 6: metrics instrumentation
+        self.metrics = {
+            "total_messages": 0,
+            "message_counts": {m.name: 0 for m in Message},
+            "terminal_requests_total": 0,
+            "terminal_request_counts": {},  # receiver_id -> count
+            "first_state_time": {  # unit_id -> {STATE_NAME: step}
+                uid: {"TRUE": None, "CONFIRMED": None, "FAILED": None}
+                for uid in self.g.units
+            },
+        }
 
     def reset(self):
         """
@@ -59,6 +70,27 @@ class Engine:
             u.inbox.clear()
             u.outbox.clear()
         self.t = 0
+        # Reset metrics and reinitialize per-unit maps (units may have changed)
+        self.metrics = {
+            "total_messages": 0,
+            "message_counts": {m.name: 0 for m in Message},
+            "terminal_requests_total": 0,
+            "terminal_request_counts": {},
+            "first_state_time": {
+                uid: {"TRUE": None, "CONFIRMED": None, "FAILED": None}
+                for uid in self.g.units
+            },
+        }
+
+    # ----- metrics helpers -----
+    def _record_first_state(self, uid: str, state: State):
+        """Record the first time a unit reaches TRUE/CONFIRMED/FAILED."""
+        if state.name in ("TRUE", "CONFIRMED", "FAILED"):
+            unit_map = self.metrics["first_state_time"].setdefault(
+                uid, {"TRUE": None, "CONFIRMED": None, "FAILED": None}
+            )
+            if unit_map[state.name] is None:
+                unit_map[state.name] = self.t
 
     # ----- message passing -----
     def send_message(self, sender_id: str, receiver_id: str, message: Message):
@@ -87,6 +119,19 @@ class Engine:
         for u in self.g.units.values():
             while u.outbox:
                 receiver_id, message = u.outbox.pop(0)
+                # Metrics: count message types and terminal requests
+                self.metrics["total_messages"] += 1
+                self.metrics["message_counts"][message.name] += 1
+                if (
+                    message == Message.REQUEST
+                    and receiver_id in self.g.units
+                    and self.g.units[receiver_id].kind == UnitType.TERMINAL
+                ):
+                    self.metrics["terminal_requests_total"] += 1
+                    self.metrics["terminal_request_counts"][receiver_id] = (
+                        self.metrics["terminal_request_counts"].get(receiver_id, 0)
+                        + 1
+                    )
                 self.send_message(u.id, receiver_id, message)
 
     def _process_messages(self, unit_id: str):
@@ -243,6 +288,7 @@ class Engine:
                 # Only process state transitions if no messages have changed the state
                 if u.state == State.INACTIVE and u.a >= u.thresh:
                     u.state = State.TRUE
+                    self._record_first_state(uid, State.TRUE)
                     # Send CONFIRM to parent (via SUB links)
                     for edge in self.g.out_edges[uid]:
                         if edge.type == LinkType.SUB:
@@ -250,6 +296,7 @@ class Engine:
 
                 elif u.state == State.REQUESTED and u.a >= u.thresh:
                     u.state = State.TRUE
+                    self._record_first_state(uid, State.TRUE)
                     # Send CONFIRM to parent (via SUB links)
                     for edge in self.g.out_edges[uid]:
                         if edge.type == LinkType.SUB:
@@ -258,6 +305,7 @@ class Engine:
                 elif u.state == State.TRUE and u.a < 0.1:
                     if u.state != State.FAILED:
                         u.state = State.FAILED
+                        self._record_first_state(uid, State.FAILED)
                         # Send INHIBIT_CONFIRM to parent
                         for edge in self.g.out_edges[uid]:
                             if edge.type == LinkType.SUB:
@@ -297,6 +345,7 @@ class Engine:
                         and u.state != State.CONFIRMED
                     ):
                         u.state = State.CONFIRMED
+                        self._record_first_state(uid, State.CONFIRMED)
                         # Send CONFIRM to parent (via SUB links)
                         for edge in self.g.out_edges[uid]:
                             if edge.type == LinkType.SUB:
@@ -325,6 +374,7 @@ class Engine:
                 if failed_children and u.state not in (State.FAILED,):
                     old_state = u.state
                     u.state = State.FAILED
+                    self._record_first_state(uid, State.FAILED)
                     # Propagate failure to parent only if we just failed
                     if old_state != State.FAILED:
                         for edge in self.g.out_edges[uid]:
@@ -382,5 +432,13 @@ class Engine:
                     "outbox_size": len(u.outbox),
                 }
                 for uid, u in self.g.units.items()
+            },
+            "metrics": {
+                "t": self.t,
+                "total_messages": self.metrics["total_messages"],
+                "message_counts": dict(self.metrics["message_counts"]),
+                "terminal_requests_total": self.metrics["terminal_requests_total"],
+                "terminal_request_counts": dict(self.metrics["terminal_request_counts"]),
+                "first_state_time": self.metrics["first_state_time"],
             },
         }
