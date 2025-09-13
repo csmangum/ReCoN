@@ -209,36 +209,36 @@ class Engine:
         if link_type == LinkType.SUB:
             # SUB: child -> parent evidence propagation
             if state in (State.TRUE, State.CONFIRMED):
-                return 1.0  # positive evidence
+                return self.config.sub_positive  # positive evidence
             elif state == State.FAILED:
-                return -1.0  # negative evidence
+                return self.config.sub_negative  # negative evidence
             else:
                 return 0.0
 
         elif link_type == LinkType.SUR:
             # SUR: parent -> child top-down request
             if state in (State.REQUESTED, State.ACTIVE):
-                return 0.3  # request signal
+                return self.config.sur_positive  # request signal
             elif state == State.FAILED:
-                return -0.3  # inhibition signal
+                return self.config.sur_negative  # inhibition signal
             else:
                 return 0.0
 
         elif link_type == LinkType.POR:
             # POR: predecessor -> successor temporal sequence
             if state == State.CONFIRMED:
-                return 0.5  # enable successor
+                return self.config.por_positive  # enable successor
             elif state == State.FAILED:
-                return -0.5  # inhibit successor
+                return self.config.por_negative  # inhibit successor
             else:
                 return 0.0
 
         elif link_type == LinkType.RET:
             # RET: successor -> predecessor temporal feedback
             if state == State.FAILED:
-                return -0.5  # failure feedback
+                return self.config.ret_negative  # failure feedback
             elif state == State.CONFIRMED:
-                return 0.2  # success feedback
+                return self.config.ret_positive  # success feedback
             else:
                 return 0.0
 
