@@ -2,7 +2,7 @@
 
 ## Abstract
 
-This project implements a faithful, self-contained Request Confirmation Network (ReCoN) as introduced in the CoCoNIPS 2015 paper. ReCoN is a spreading-activation graph where scripted units actively request evidence from terminal units and confirm hypotheses through hierarchical composition and temporal sequencing. I built an interactive Streamlit visualization, a YAML→graph compiler for authoring object scripts, and a lightweight perception pipeline for synthetic scenes and terminal features. The system demonstrates active perception: the network selectively computes only what it requests and exposes a clear causal trace for confirmations and failures.
+This project implements a faithful, practical Request Confirmation Network (ReCoN) based on the CoCoNIPS 2015 paper. ReCoN is modeled as a spreading-activation graph in which scripted units actively request evidence from terminal units and confirm hypotheses through hierarchical composition and temporal sequencing. The implementation includes a modular Python core, a YAML→graph compiler for authoring object scripts, a lightweight perception pipeline for synthetic scenes (houses, barns, occlusions), and an interactive Streamlit visualization. The result demonstrates end‑to‑end active perception: selective, top‑down computation with interpretable control flow and a clear bridge from representation to user interface.
 
 ## Demo & Links
 
