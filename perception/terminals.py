@@ -839,3 +839,193 @@ def comprehensive_sample_scene_and_terminals():
     img = make_house_scene()
     t = comprehensive_terminals_from_image(img)
     return img, t
+
+
+# ------------------------------ Tiny CNN Features ------------------------------
+
+class TinyCNN:
+    """
+    A tiny, NumPy-based convolutional feature learner using Hebbian/Oja's rule.
+
+    Learns a small bank of convolutional filters in an unsupervised, online way
+    from synthetic scenes. At inference, applies ReLU + global-average pooling to
+    produce compact per-filter activations suitable for terminal nodes.
+    """
+
+    def __init__(self, kernel_size: int = 5, num_filters: int = 6, learning_rate: float = 0.01):
+        self.kernel_size = int(kernel_size)
+        self.num_filters = int(num_filters)
+        self.learning_rate = float(learning_rate)
+        # Initialize filters with small random weights and unit norm
+        k = self.kernel_size
+        self.filters = np.random.randn(self.num_filters, k, k).astype(np.float32) * 0.05
+        for i in range(self.num_filters):
+            w = self.filters[i]
+            norm = np.linalg.norm(w) + 1e-8
+            self.filters[i] = w / norm
+        self.is_trained = False
+
+    def _sample_patches(self, img: np.ndarray, n_patches: int) -> np.ndarray:
+        """Sample random kxk patches from an image and zero-mean them."""
+        k = self.kernel_size
+        h, w = img.shape
+        if h < k or w < k:
+            pad_y = max(0, k - h)
+            pad_x = max(0, k - w)
+            img = np.pad(img, ((0, pad_y), (0, pad_x)), mode='constant')
+            h, w = img.shape
+        patches = []
+        for _ in range(max(1, n_patches)):
+            y = np.random.randint(0, h - k + 1)
+            x = np.random.randint(0, w - k + 1)
+            p = img[y:y+k, x:x+k].astype(np.float32)
+            p = p - float(p.mean())
+            patches.append(p)
+        return np.stack(patches, axis=0)
+
+    def _oja_update(self, patch: np.ndarray):
+        """Winner-take-all Oja's rule update for filters with the given patch."""
+        flat_patch = patch.reshape(-1)
+        responses = []
+        for i in range(self.num_filters):
+            responses.append(float(np.dot(self.filters[i].reshape(-1), flat_patch)))
+        winner = int(np.argmax(np.array(responses)))
+        y = responses[winner]
+        w = self.filters[winner].reshape(-1)
+        lr = self.learning_rate
+        # Oja's rule: Δw = lr * (y*x - y^2*w)
+        dw = lr * (y * flat_patch - (y * y) * w)
+        w = w + dw
+        # Normalize to prevent blow-up and encourage stable filters
+        norm = np.linalg.norm(w) + 1e-8
+        w = w / norm
+        self.filters[winner] = w.reshape(self.kernel_size, self.kernel_size)
+
+    def train(self, training_images, epochs: int = 10, patches_per_image: int = 30):
+        """Unsupervised filter learning from a list of 2D images."""
+        if not training_images:
+            return
+        for _ in range(max(1, int(epochs))):
+            for img in training_images:
+                patches = self._sample_patches(img, patches_per_image)
+                for p in patches:
+                    self._oja_update(p)
+        self.is_trained = True
+
+    def _conv2d_same(self, img: np.ndarray, kernel: np.ndarray) -> np.ndarray:
+        """2D convolution with 'same' output size and zero padding."""
+        try:
+            # Prefer SciPy if available for performance
+            return _sp_ndimage.convolve(img, kernel, mode='constant', cval=0.0).astype(np.float32)
+        except Exception:
+            k = kernel.shape[0]
+            pad = k // 2
+            padded = np.pad(img, ((pad, pad), (pad, pad)), mode='constant')
+            h, w = img.shape
+            out = np.zeros((h, w), dtype=np.float32)
+            ker = kernel[::-1, ::-1].astype(np.float32)
+            for y in range(h):
+                for x in range(w):
+                    region = padded[y:y+k, x:x+k]
+                    out[y, x] = float(np.sum(region * ker))
+            return out
+
+    def encode(self, img: np.ndarray) -> np.ndarray:
+        """Apply learned filters with ReLU + global average pooling to produce features."""
+        img = img.astype(np.float32)
+        features = []
+        for i in range(self.num_filters):
+            fmap = self._conv2d_same(img, self.filters[i])
+            fmap = np.maximum(0.0, fmap)  # ReLU
+            feat = float(fmap.mean())
+            features.append(feat)
+        features = np.array(features, dtype=np.float32)
+        # Normalize to [0, 1] robustly
+        maxv = float(features.max()) if features.size > 0 else 1.0
+        if maxv > 0:
+            features = features / (maxv + 1e-8)
+        return features
+
+    def save(self, filepath: str):
+        data = {
+            'filters': self.filters,
+            'kernel_size': self.kernel_size,
+            'num_filters': self.num_filters,
+            'learning_rate': self.learning_rate,
+            'is_trained': self.is_trained,
+        }
+        with open(filepath, 'wb') as f:
+            pickle.dump(data, f)
+
+    def load(self, filepath: str):
+        with open(filepath, 'rb') as f:
+            data = pickle.load(f)
+        self.filters = data['filters']
+        self.kernel_size = int(data['kernel_size'])
+        self.num_filters = int(data['num_filters'])
+        self.learning_rate = float(data['learning_rate'])
+        self.is_trained = bool(data['is_trained'])
+
+
+# Global TinyCNN instance
+_global_cnn = None
+
+
+def get_cnn(retrain=False):
+    """
+    Get or create the global TinyCNN instance. Training is gated by env RECON_TRAIN_CNN.
+    """
+    global _global_cnn
+    model_path = '/tmp/recon_tinycnn.pkl'
+    if _global_cnn is None:
+        _global_cnn = TinyCNN(kernel_size=5, num_filters=6, learning_rate=0.02)
+        # Try load existing
+        if os.path.exists(model_path) and not retrain:
+            try:
+                _global_cnn.load(model_path)
+                print("Loaded pretrained TinyCNN")
+            except Exception:
+                print("Failed to load TinyCNN, will train new one if enabled")
+                _global_cnn.is_trained = False
+        # Optionally train
+        train_enabled = os.environ.get('RECON_TRAIN_CNN', '0') in ('1','true','True')
+        if (not _global_cnn.is_trained or retrain) and train_enabled:
+            from .dataset import make_house_scene, make_barn_scene, make_varied_scene
+            training_images = []
+            for _ in range(20):
+                training_images.append(make_house_scene(noise=0.05))
+                training_images.append(make_barn_scene(noise=0.05))
+                training_images.append(make_varied_scene('house', noise=0.1))
+                training_images.append(make_varied_scene('barn', noise=0.1))
+            _global_cnn.train(training_images, epochs=10, patches_per_image=40)
+            _global_cnn.save(model_path)
+    return _global_cnn
+
+
+def cnn_terminals_from_image(img):
+    """
+    Extract CNN-based terminal features from an image using TinyCNN.
+
+    Returns a dict mapping 't_cnn_i' to activation values in [0, 1].
+    """
+    cnn = get_cnn()
+    features = cnn.encode(img)
+    terms = {}
+    for i, v in enumerate(features):
+        terms[f't_cnn_{i}'] = float(v)
+    return terms
+
+
+def deep_comprehensive_terminals_from_image(img):
+    """
+    Extended comprehensive terminals including advanced, autoencoder, and CNN features.
+    Does not replace existing comprehensive_terminals_from_image to keep tests stable.
+    """
+    adv = advanced_terminals_from_image(img)
+    ae = autoencoder_terminals_from_image(img)
+    cnn = cnn_terminals_from_image(img)
+    all_terms = {}
+    all_terms.update(adv)
+    all_terms.update(ae)
+    all_terms.update(cnn)
+    return all_terms
