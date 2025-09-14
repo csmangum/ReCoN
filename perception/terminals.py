@@ -38,7 +38,7 @@ except ImportError:  # pragma: no cover - provide lightweight fallbacks
         kernel = np.exp(-(x * x) / (2.0 * float(sigma) * float(sigma)))
         s = kernel.sum()
         if s <= 0:
-            return np.array([1.0], dtype=np.float32)
+            raise ValueError(f"Invalid sigma value {sigma}: resulting Gaussian kernel sum is non-positive.")
         return (kernel / s).astype(np.float32)
 
     def _apply_convolve1d_same(img: np.ndarray, k: np.ndarray, axis: int) -> np.ndarray:
