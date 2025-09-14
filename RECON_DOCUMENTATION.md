@@ -225,6 +225,12 @@ class Graph:
 
     def por_successors(self, u_id: str) -> List[str]:
         """Get successor units connected via POR links"""
+
+    def to_networkx(self) -> "nx.DiGraph":
+        """Convert ReCoN graph to NetworkX DiGraph for analysis/export"""
+
+    def export_graphml(self, filepath: str) -> None:
+        """Export graph to GraphML format for external tools (Gephi, yEd, etc.)"""
 ```
 
 #### Engine Class
@@ -242,6 +248,64 @@ class Engine:
 
     def snapshot(self) -> dict:
         """Create current network state snapshot"""
+```
+
+## GraphML Export
+
+ReCoN graphs can be exported to GraphML format for analysis in external graph visualization and analysis tools.
+
+### Export Methods
+
+```python
+from recon_core.compiler import compile_from_file
+
+# Compile a ReCoN graph
+graph = compile_from_file('scripts/house.yaml')
+
+# Export to GraphML format
+graph.export_graphml('house_network.graphml')
+
+# Or get NetworkX DiGraph for programmatic analysis
+nx_graph = graph.to_networkx()
+```
+
+### Exported Attributes
+
+**Node Attributes:**
+- `kind`: Unit type ("SCRIPT" or "TERMINAL")
+- `state`: Current state ("INACTIVE", "REQUESTED", "ACTIVE", etc.)
+- `activation`: Current activation level (0.0-1.0)
+- `threshold`: Confirmation threshold
+- `meta_*`: Any custom metadata attributes (prefixed)
+
+**Edge Attributes:**
+- `type`: Link type ("SUB", "SUR", "POR", "RET")
+- `weight`: Connection strength
+
+### Compatible Tools
+
+GraphML files can be imported into:
+- **Gephi**: Advanced graph visualization and analysis
+- **yEd**: Graph editor with layout algorithms
+- **NetworkX**: For further programmatic analysis
+- **Other tools**: Any GraphML-compatible software
+
+### Example Usage
+
+```python
+import networkx as nx
+
+# Export and re-import with NetworkX
+graph.export_graphml('network.graphml')
+imported = nx.read_graphml('network.graphml')
+
+# Analyze with NetworkX
+print(f"Nodes: {imported.number_of_nodes()}")
+print(f"Edges: {imported.number_of_edges()}")
+
+# Access ReCoN-specific attributes
+for node, attrs in imported.nodes(data=True):
+    print(f"Unit {node}: {attrs['kind']} in state {attrs['state']}")
 ```
 
 ## House Recognition Example

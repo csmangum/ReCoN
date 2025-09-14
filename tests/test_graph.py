@@ -463,6 +463,137 @@ class TestGraph:
         assert edge3 in graph.in_edges['u2']
         assert edge2 in graph.out_edges['u2']
 
+    def test_to_networkx_basic(self):
+        """Test to_networkx() converts graph to NetworkX format correctly."""
+        pytest.importorskip("networkx")
+        import networkx as nx
+
+        graph = Graph()
+        unit1 = Unit('u1', UnitType.SCRIPT, state=State.ACTIVE, a=0.7, thresh=0.6)
+        unit2 = Unit('u2', UnitType.TERMINAL, state=State.REQUESTED, a=0.3)
+        graph.add_unit(unit1)
+        graph.add_unit(unit2)
+
+        edge = Edge('u1', 'u2', LinkType.SUR, w=0.8)
+        graph.add_edge(edge)
+
+        nx_graph = graph.to_networkx()
+
+        # Check it's a DiGraph
+        assert isinstance(nx_graph, nx.DiGraph)
+
+        # Check nodes
+        assert nx_graph.number_of_nodes() == 2
+        assert 'u1' in nx_graph.nodes()
+        assert 'u2' in nx_graph.nodes()
+
+        # Check node attributes
+        assert nx_graph.nodes['u1']['kind'] == 'SCRIPT'
+        assert nx_graph.nodes['u1']['state'] == 'ACTIVE'
+        assert nx_graph.nodes['u1']['activation'] == 0.7
+        assert nx_graph.nodes['u1']['threshold'] == 0.6
+
+        assert nx_graph.nodes['u2']['kind'] == 'TERMINAL'
+        assert nx_graph.nodes['u2']['state'] == 'REQUESTED'
+        assert nx_graph.nodes['u2']['activation'] == 0.3
+        assert nx_graph.nodes['u2']['threshold'] == 0.5  # default
+
+        # Check edges
+        assert nx_graph.number_of_edges() == 1
+        assert nx_graph.has_edge('u1', 'u2')
+
+        # Check edge attributes
+        edge_attrs = nx_graph.get_edge_data('u1', 'u2')
+        assert edge_attrs['type'] == 'SUR'
+        assert edge_attrs['weight'] == 0.8
+
+    def test_to_networkx_with_meta(self):
+        """Test to_networkx() includes meta attributes."""
+        pytest.importorskip("networkx")
+
+        graph = Graph()
+        unit = Unit('u1', UnitType.SCRIPT, meta={'custom_attr': 'value', 'number': 42})
+        graph.add_unit(unit)
+
+        nx_graph = graph.to_networkx()
+
+        # Check meta attributes are prefixed
+        assert nx_graph.nodes['u1']['meta_custom_attr'] == 'value'
+        assert nx_graph.nodes['u1']['meta_number'] == 42
+
+    def test_to_networkx_networkx_not_available(self):
+        """Test to_networkx() raises ImportError when NetworkX not available."""
+        # Mock the HAS_NETWORKX flag to False
+        import recon_core.graph as graph_module
+        original_has_networkx = graph_module.HAS_NETWORKX
+        graph_module.HAS_NETWORKX = False
+
+        try:
+            graph = Graph()
+            with pytest.raises(ImportError, match="NetworkX is required for graph conversion"):
+                graph.to_networkx()
+        finally:
+            # Restore original value
+            graph_module.HAS_NETWORKX = original_has_networkx
+
+    def test_export_graphml_basic(self):
+        """Test export_graphml() creates valid GraphML file."""
+        pytest.importorskip("networkx")
+        import tempfile
+        import os
+
+        graph = Graph()
+        unit1 = Unit('u1', UnitType.SCRIPT, state=State.ACTIVE)
+        unit2 = Unit('u2', UnitType.TERMINAL)
+        graph.add_unit(unit1)
+        graph.add_unit(unit2)
+        graph.add_edge(Edge('u1', 'u2', LinkType.SUB))
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.graphml', delete=False) as f:
+            temp_file = f.name
+
+        try:
+            graph.export_graphml(temp_file)
+            assert os.path.exists(temp_file)
+
+            # Read and check basic structure
+            with open(temp_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+                assert '<?xml version=' in content
+                assert '<graphml' in content
+                assert '<graph edgedefault="directed">' in content
+                assert '<node id="u1">' in content
+                assert '<node id="u2">' in content
+                assert '<edge source="u1" target="u2">' in content
+        finally:
+            if os.path.exists(temp_file):
+                os.unlink(temp_file)
+
+    def test_export_graphml_networkx_not_available(self):
+        """Test export_graphml() raises ImportError when NetworkX not available."""
+        import tempfile
+        import os
+        import recon_core.graph as graph_module
+
+        # Mock the HAS_NETWORKX flag to False
+        original_has_networkx = graph_module.HAS_NETWORKX
+        graph_module.HAS_NETWORKX = False
+
+        try:
+            graph = Graph()
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.graphml', delete=False) as f:
+                temp_file = f.name
+
+            try:
+                with pytest.raises(ImportError, match="NetworkX is required for graph conversion"):
+                    graph.export_graphml(temp_file)
+            finally:
+                if os.path.exists(temp_file):
+                    os.unlink(temp_file)
+        finally:
+            # Restore original value
+            graph_module.HAS_NETWORKX = original_has_networkx
+
 
 if __name__ == "__main__":
     pytest.main([__file__])

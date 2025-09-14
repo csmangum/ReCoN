@@ -8,9 +8,18 @@ This module defines the core data structures used to represent the network topol
 """
 
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import Dict, List, Tuple
-from .enums import UnitType, LinkType, State, Message
+
+from .enums import LinkType, Message, State, UnitType
+
+try:
+    import networkx as nx
+
+    HAS_NETWORKX = True
+except ImportError:
+    HAS_NETWORKX = False
 
 
 @dataclass
@@ -134,11 +143,13 @@ class Graph:
         Raises:
             AssertionError: If source or destination units don't exist in the graph
         """
-        assert e.src in self.units and e.dst in self.units, "Both source and destination units must exist"
+        assert (
+            e.src in self.units and e.dst in self.units
+        ), "Both source and destination units must exist"
         self.out_edges[e.src].append(e)
         self.in_edges[e.dst].append(e)
 
-    def neighbors(self, u_id: str, direction: str = 'out') -> List[Edge]:
+    def neighbors(self, u_id: str, direction: str = "out") -> List[Edge]:
         """
         Get all edges connected to a unit in the specified direction.
 
@@ -149,7 +160,7 @@ class Graph:
         Returns:
             List of Edge objects connected to the specified unit
         """
-        return (self.out_edges if direction == 'out' else self.in_edges).get(u_id, [])
+        return (self.out_edges if direction == "out" else self.in_edges).get(u_id, [])
 
     def sub_children(self, parent_id: str) -> List[str]:
         """
@@ -193,3 +204,63 @@ class Graph:
             List of child unit IDs connected via SUR links
         """
         return [e.dst for e in self.out_edges[parent_id] if e.type == LinkType.SUR]
+
+    def to_networkx(self) -> "nx.DiGraph":
+        """
+        Convert the ReCoN graph to a NetworkX DiGraph for export/visualization.
+
+        Returns:
+            NetworkX DiGraph with nodes and edges representing the ReCoN network
+
+        Raises:
+            ImportError: If NetworkX is not available
+        """
+        if not HAS_NETWORKX:
+            raise ImportError(
+                "NetworkX is required for graph conversion. Install with: pip install networkx"
+            )
+
+        G = nx.DiGraph()
+
+        # Add nodes with their attributes
+        for unit_id, unit in self.units.items():
+            node_attrs = {
+                "kind": str(unit.kind.name),  # Convert enum to string name
+                "state": str(unit.state.name),  # Convert enum to string name
+                "activation": unit.a,
+                "threshold": unit.thresh,
+            }
+            # Add meta attributes if they exist
+            if unit.meta:
+                for k, v in unit.meta.items():
+                    node_attrs[f"meta_{k}"] = v
+
+            G.add_node(unit_id, **node_attrs)
+
+        # Add edges with their attributes
+        for unit_id, edges in self.out_edges.items():
+            for edge in edges:
+                edge_attrs = {
+                    "type": str(edge.type.name),  # Convert enum to string name
+                    "weight": edge.w,
+                }
+                G.add_edge(edge.src, edge.dst, **edge_attrs)
+
+        return G
+
+    def export_graphml(self, filepath: str) -> None:
+        """
+        Export the ReCoN graph to GraphML format.
+
+        GraphML is an XML-based graph format that preserves node and edge attributes,
+        making it suitable for import into graph analysis tools, visualization software,
+        and other graph processing libraries.
+
+        Args:
+            filepath: Path where to save the GraphML file
+
+        Raises:
+            ImportError: If NetworkX is not available
+        """
+        nx_graph = self.to_networkx()
+        nx.write_graphml(nx_graph, filepath)
