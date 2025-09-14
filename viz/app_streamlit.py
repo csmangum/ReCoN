@@ -19,6 +19,11 @@ import os
 import sys
 import time
 
+# Add project root to Python path BEFORE any imports
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
@@ -28,11 +33,6 @@ from perception.terminals import sample_scene_and_terminals
 from recon_core.engine import Engine
 from recon_core.enums import LinkType, State, UnitType
 from recon_core.graph import Edge, Graph, Unit
-
-# Add project root to Python path
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
 
 st.set_page_config(layout="wide", page_title="ReCoN Demo")
 
@@ -113,7 +113,7 @@ class ReCoNSimulation:
         # Capture messages before stepping
         messages_this_step = []
         for unit in self.graph.units.values():
-            for receiver_id, message in unit.outbox.items():
+            for receiver_id, message in unit.outbox:
                 messages_this_step.append((unit.id, receiver_id, message))
 
         # Step the simulation
@@ -198,7 +198,7 @@ if st.session_state.sim.is_running:
     st.rerun()
 
 # Timeline scrubber
-if st.session_state.sim.history:
+if len(st.session_state.sim.history) > 1:
     timeline_idx = st.sidebar.slider(
         "⏱️ Timeline",
         0,
@@ -206,7 +206,11 @@ if st.session_state.sim.history:
         len(st.session_state.sim.history) - 1,
     )
     current_snap = st.session_state.sim.history[timeline_idx]
+elif st.session_state.sim.history:
+    timeline_idx = 0
+    current_snap = st.session_state.sim.history[0]
 else:
+    timeline_idx = 0
     current_snap = st.session_state.get("snap", st.session_state.sim.engine.snapshot())
 
 # Unit selector for hover functionality (moved to sidebar for scoping)
@@ -375,8 +379,8 @@ with col_graph:
         for e in edges:
             style = edge_styles[e.type.name]
             G.add_edge(
-                e.src_id,
-                e.dst_id,
+                e.src,
+                e.dst,
                 color=style["color"],
                 style=style["style"],
                 alpha=style["alpha"],
