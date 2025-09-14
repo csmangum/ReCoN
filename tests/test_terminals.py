@@ -317,15 +317,18 @@ class TestComprehensiveFeatures(unittest.TestCase):
         img = make_house_scene(size=64, noise=0.0)
         terminals = comprehensive_terminals_from_image(img)
         
-        # Should have 16 terminals total (12 advanced + 4 autoencoder)
-        self.assertEqual(len(terminals), 16)
+        # Should have 21 terminals total (12 advanced + 4 autoencoder + 5 extra)
+        self.assertEqual(len(terminals), 21)
         
         # Should have both advanced and autoencoder features
-        advanced_keys = [k for k in terminals.keys() if not k.startswith('t_ae')]
+        _advanced_keys = [k for k in terminals.keys() if not k.startswith('t_ae')]
         ae_keys = [k for k in terminals.keys() if k.startswith('t_ae')]
         
-        self.assertEqual(len(advanced_keys), 12)
         self.assertEqual(len(ae_keys), 4)
+
+        # New engineered extras should be present
+        for k in ['t_vsym','t_line_aniso','t_triangle','t_rect','t_door_bright']:
+            self.assertIn(k, terminals)
         
         # All values should be reasonable
         for key, value in terminals.items():
@@ -362,7 +365,7 @@ class TestConvenienceFunctions(unittest.TestCase):
         
         # Should return valid image and all terminals
         self.assertEqual(img.shape, (64, 64))
-        self.assertEqual(len(terminals), 16)  # All terminals
+        self.assertEqual(len(terminals), 21)  # All terminals (12 advanced + 4 AE + 5 extra)
         self.assertTrue(np.all(img >= 0))
         self.assertTrue(np.all(img <= 1))
 
