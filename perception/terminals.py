@@ -8,7 +8,113 @@ images that can be used to recognize simple geometric shapes and patterns.
 
 import numpy as np
 from .dataset import make_house_scene
-from scipy import ndimage
+
+# Optional SciPy dependency: provide fallbacks if unavailable
+try:
+    from scipy import ndimage as _sp_ndimage  # type: ignore
+
+    def _gaussian_filter(img: np.ndarray, sigma: float) -> np.ndarray:
+        return _sp_ndimage.gaussian_filter(img, sigma)
+
+    def _maximum_filter(img: np.ndarray, size: int = 3) -> np.ndarray:
+        return _sp_ndimage.maximum_filter(img, size=size)
+
+    def _uniform_filter(img: np.ndarray, size: int = 5) -> np.ndarray:
+        return _sp_ndimage.uniform_filter(img, size=size)
+
+    def _label(binary: np.ndarray):
+        return _sp_ndimage.label(binary)
+
+    def _center_of_mass(mask: np.ndarray):
+        return _sp_ndimage.center_of_mass(mask)
+    
+    def _sum_by_label(input_arr: np.ndarray, labels: np.ndarray, index) -> np.ndarray:
+        return _sp_ndimage.sum(input_arr, labels, index)
+except Exception:  # pragma: no cover - provide lightweight fallbacks
+    # Lightweight NumPy-based fallbacks for environments without SciPy
+    def _gaussian_kernel_1d(sigma: float) -> np.ndarray:
+        radius = max(1, int(3 * float(sigma)))
+        x = np.arange(-radius, radius + 1, dtype=np.float32)
+        kernel = np.exp(-(x * x) / (2.0 * float(sigma) * float(sigma)))
+        s = kernel.sum()
+        if s <= 0:
+            return np.array([1.0], dtype=np.float32)
+        return (kernel / s).astype(np.float32)
+
+    def _apply_convolve1d_same(img: np.ndarray, k: np.ndarray, axis: int) -> np.ndarray:
+        # Apply 1D convolution along specified axis using 'same' mode
+        return np.apply_along_axis(lambda m: np.convolve(m, k, mode='same'), axis, img)
+
+    def _gaussian_filter(img: np.ndarray, sigma: float) -> np.ndarray:
+        if sigma <= 0:
+            return img.astype(np.float32)
+        k = _gaussian_kernel_1d(sigma)
+        tmp = _apply_convolve1d_same(img.astype(np.float32), k, axis=1)
+        out = _apply_convolve1d_same(tmp, k, axis=0)
+        return out.astype(np.float32)
+
+    def _maximum_filter(img: np.ndarray, size: int = 3) -> np.ndarray:
+        # 2D morphological max over size x size window via shift-and-max
+        size = int(max(1, size))
+        pad = size // 2
+        padded = np.pad(img, ((pad, pad), (pad, pad)), mode='edge')
+        h, w = img.shape
+        acc = None
+        for dy in range(size):
+            for dx in range(size):
+                window = padded[dy:dy+h, dx:dx+w]
+                if acc is None:
+                    acc = window.copy()
+                else:
+                    acc = np.maximum(acc, window)
+        return acc.astype(np.float32)
+
+    def _uniform_filter(img: np.ndarray, size: int = 5) -> np.ndarray:
+        # Separable box filter using 1D moving average along rows then columns
+        size = int(max(1, size))
+        k1d = np.ones(size, dtype=np.float32) / float(size)
+        tmp = _apply_convolve1d_same(img.astype(np.float32), k1d, axis=1)
+        out = _apply_convolve1d_same(tmp, k1d, axis=0)
+        return out.astype(np.float32)
+
+    def _label(binary: np.ndarray):
+        # Simple connected components labeling (4-neighborhood)
+        h, w = binary.shape
+        labels = np.zeros((h, w), dtype=np.int32)
+        current_label = 0
+        for y in range(h):
+            for x in range(w):
+                if not binary[y, x] or labels[y, x] != 0:
+                    continue
+                current_label += 1
+                # BFS flood fill
+                stack = [(y, x)]
+                labels[y, x] = current_label
+                while stack:
+                    cy, cx = stack.pop()
+                    for ny, nx in ((cy-1, cx), (cy+1, cx), (cy, cx-1), (cy, cx+1)):
+                        if 0 <= ny < h and 0 <= nx < w:
+                            if binary[ny, nx] and labels[ny, nx] == 0:
+                                labels[ny, nx] = current_label
+                                stack.append((ny, nx))
+        return labels, current_label
+
+    def _center_of_mass(mask: np.ndarray):
+        ys, xs = np.where(mask)
+        if len(ys) == 0:
+            return (0.0, 0.0)
+        return (float(ys.mean()), float(xs.mean()))
+    
+    def _sum_by_label(input_arr: np.ndarray, labels: np.ndarray, index) -> np.ndarray:
+        # Compute sum of input over each label in index (iterable or int)
+        if isinstance(index, int):
+            mask = labels == index
+            return float(input_arr[mask].sum())
+        sums = []
+        for idx in index:
+            mask = labels == idx
+            sums.append(float(input_arr[mask].sum()))
+        return np.array(sums, dtype=np.float32)
 # Lazy import matplotlib only if needed (debug/plotting)
 try:
     import matplotlib.pyplot as plt  # noqa: F401
@@ -105,9 +211,9 @@ def sift_like_features(img):
     
     # Apply Gaussian smoothing
     sigma = 1.0
-    Ixx = ndimage.gaussian_filter(Ixx, sigma)
-    Ixy = ndimage.gaussian_filter(Ixy, sigma)
-    Iyy = ndimage.gaussian_filter(Iyy, sigma)
+    Ixx = _gaussian_filter(Ixx, sigma)
+    Ixy = _gaussian_filter(Ixy, sigma)
+    Iyy = _gaussian_filter(Iyy, sigma)
     
     # Harris response
     det_H = Ixx * Iyy - Ixy * Ixy
@@ -138,17 +244,17 @@ def blob_detectors(img):
     """
     # Approximated Laplacian of Gaussian using difference of Gaussians
     sigma1, sigma2 = 1.0, 2.0
-    blur1 = ndimage.gaussian_filter(img, sigma1)
-    blur2 = ndimage.gaussian_filter(img, sigma2)
+    blur1 = _gaussian_filter(img, sigma1)
+    blur2 = _gaussian_filter(img, sigma2)
     dog = blur1 - blur2
     
     # Local maxima detection (simplified)
-    local_maxima = ndimage.maximum_filter(np.abs(dog), size=3) == np.abs(dog)
+    local_maxima = _maximum_filter(np.abs(dog), size=3) == np.abs(dog)
     blob_response = np.abs(dog) * local_maxima
     
     # Pattern analysis
-    mean_intensity = ndimage.uniform_filter(img, size=5)
-    intensity_variance = ndimage.uniform_filter(img**2, size=5) - mean_intensity**2
+    mean_intensity = _uniform_filter(img, size=5)
+    intensity_variance = _uniform_filter(img**2, size=5) - mean_intensity**2
     
     return {
         'blobs': float(np.mean(blob_response > 0.01)),        # Blob density
@@ -172,17 +278,17 @@ def geometric_features(img):
     binary = img > threshold
     
     # Connected components analysis
-    labeled_img, num_features = ndimage.label(binary)
+    labeled_img, num_features = _label(binary)
     
     # Centroid and moments
     if num_features > 0:
         # Find largest component
-        component_sizes = ndimage.sum(binary, labeled_img, range(num_features + 1))
+        component_sizes = _sum_by_label(binary, labeled_img, range(num_features + 1))
         largest_component = np.argmax(component_sizes[1:]) + 1
         largest_mask = labeled_img == largest_component
         
         # Shape properties
-        center_of_mass = ndimage.center_of_mass(largest_mask)
+        center_of_mass = _center_of_mass(largest_mask)
         compactness = np.sum(largest_mask) / (np.sum(largest_mask) ** 0.5) if np.sum(largest_mask) > 0 else 0
         
         # Vertical and horizontal extent

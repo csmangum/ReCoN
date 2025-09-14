@@ -18,7 +18,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from perception.dataset import (
     canvas, draw_rect, draw_triangle, make_house_scene, make_barn_scene,
-    make_occluded_scene, make_varied_scene
+    make_occluded_scene, make_varied_scene, make_church_scene, make_tent_scene,
+    make_tower_scene
 )
 
 
@@ -306,6 +307,42 @@ class TestVariedScenes(unittest.TestCase):
         # Both should have similar amounts of content (both are house scenes)
         content_ratio = min(house_content, unknown_content) / max(house_content, unknown_content)
         self.assertGreater(content_ratio, 0.4)  # Should be reasonably similar amount of content
+
+    def test_new_scene_types_basic_properties(self):
+        """Test basic generation for church, tent, and tower scenes."""
+        church = make_church_scene(size=64, noise=0.0)
+        tent = make_tent_scene(size=64, noise=0.0)
+        tower = make_tower_scene(size=64, noise=0.0)
+
+        for scene in [church, tent, tower]:
+            self.assertEqual(scene.shape, (64, 64))
+            self.assertTrue(np.all(scene >= 0))
+            self.assertTrue(np.all(scene <= 1))
+
+        # Tent should be predominantly triangular with bright apex/base gradient proxy
+        tent_pixels = np.sum(np.abs(tent - 0.85) < 0.02)
+        self.assertGreater(tent_pixels, 80)
+
+        # Church should have bright steeple/spire pixels
+        church_bright = np.sum(church > 0.9)
+        self.assertGreater(church_bright, 10)
+
+        # Tower should be tall and narrow: vertical extent > horizontal extent proxy
+        tower_cols_active = np.sum(np.max(tower, axis=0) > 0.1)
+        tower_rows_active = np.sum(np.max(tower, axis=1) > 0.1)
+        self.assertGreater(tower_rows_active, tower_cols_active)
+
+    def test_varied_includes_new_types(self):
+        """Test varied scene generation supports new types without errors."""
+        scenes = [
+            make_varied_scene('church', size=64),
+            make_varied_scene('tent', size=64),
+            make_varied_scene('tower', size=64),
+        ]
+        for scene in scenes:
+            self.assertEqual(scene.shape, (64, 64))
+            self.assertTrue(np.all(scene >= 0))
+            self.assertTrue(np.all(scene <= 1))
 
 
 if __name__ == '__main__':
