@@ -94,7 +94,7 @@ class ReCoNSimulation:
 
     def generate_scene(self):
         """Generate a new synthetic scene and initialize terminals."""
-        img, tvals = sample_scene_and_terminals()  # scene_img is returned
+        img, tvals = sample_scene_and_terminals()  # img is the scene image
         # seed terminals
         for term_id, term_val in tvals.items():
             self.graph.units[term_id].a = float(term_val)

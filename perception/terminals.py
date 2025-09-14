@@ -8,7 +8,7 @@ images that can be used to recognize simple geometric shapes and patterns.
 
 import numpy as np
 
-from .dataset import make_house_scene
+from .dataset import make_barn_scene, make_house_scene, make_varied_scene
 
 # Optional SciPy dependency: provide fallbacks if unavailable
 try:
@@ -34,6 +34,8 @@ try:
 
 except ImportError:  # pragma: no cover - provide lightweight fallbacks
     # Lightweight NumPy-based fallbacks for environments without SciPy
+    _sp_ndimage = None  # Ensure _sp_ndimage is defined even when SciPy unavailable
+
     def _gaussian_kernel_1d(sigma: float) -> np.ndarray:
         radius = max(1, int(3 * float(sigma)))
         x = np.arange(-radius, radius + 1, dtype=np.float32)
@@ -656,8 +658,6 @@ def get_autoencoder(retrain=False):
         # Train if needed and enabled via env var
         train_enabled = os.environ.get("RECON_TRAIN_AE", "0") in ("1", "true", "True")
         if (not _global_autoencoder.is_trained or retrain) and train_enabled:
-            from .dataset import make_barn_scene, make_varied_scene
-
             print("Training autoencoder...")
             # Generate diverse training data
             training_images = []
@@ -843,6 +843,7 @@ def comprehensive_sample_scene_and_terminals():
 
 # ------------------------------ Tiny CNN Features ------------------------------
 
+
 class TinyCNN:
     """
     A tiny, NumPy-based convolutional feature learner using Hebbian/Oja's rule.
@@ -852,7 +853,9 @@ class TinyCNN:
     produce compact per-filter activations suitable for terminal nodes.
     """
 
-    def __init__(self, kernel_size: int = 5, num_filters: int = 6, learning_rate: float = 0.01):
+    def __init__(
+        self, kernel_size: int = 5, num_filters: int = 6, learning_rate: float = 0.01
+    ):
         self.kernel_size = int(kernel_size)
         self.num_filters = int(num_filters)
         self.learning_rate = float(learning_rate)
@@ -867,18 +870,21 @@ class TinyCNN:
 
     def _sample_patches(self, img: np.ndarray, n_patches: int) -> np.ndarray:
         """Sample random kxk patches from an image and zero-mean them."""
+        if n_patches <= 0:
+            raise ValueError(f"n_patches must be a positive integer, got {n_patches}")
+
         k = self.kernel_size
         h, w = img.shape
         if h < k or w < k:
             pad_y = max(0, k - h)
             pad_x = max(0, k - w)
-            img = np.pad(img, ((0, pad_y), (0, pad_x)), mode='constant')
+            img = np.pad(img, ((0, pad_y), (0, pad_x)), mode="constant")
             h, w = img.shape
         patches = []
-        for _ in range(max(1, n_patches)):
+        for _ in range(n_patches):
             y = np.random.randint(0, h - k + 1)
             x = np.random.randint(0, w - k + 1)
-            p = img[y:y+k, x:x+k].astype(np.float32)
+            p = img[y : y + k, x : x + k].astype(np.float32)
             p = p - float(p.mean())
             patches.append(p)
         return np.stack(patches, axis=0)
@@ -903,9 +909,11 @@ class TinyCNN:
 
     def train(self, training_images, epochs: int = 10, patches_per_image: int = 30):
         """Unsupervised filter learning from a list of 2D images."""
+        if epochs <= 0:
+            raise ValueError(f"epochs must be a positive integer, got {epochs}")
         if not training_images:
             return
-        for _ in range(max(1, int(epochs))):
+        for _ in range(int(epochs)):
             for img in training_images:
                 patches = self._sample_patches(img, patches_per_image)
                 for p in patches:
@@ -914,19 +922,22 @@ class TinyCNN:
 
     def _conv2d_same(self, img: np.ndarray, kernel: np.ndarray) -> np.ndarray:
         """2D convolution with 'same' output size and zero padding."""
-        try:
+        if _sp_ndimage is not None:
             # Prefer SciPy if available for performance
-            return _sp_ndimage.convolve(img, kernel, mode='constant', cval=0.0).astype(np.float32)
-        except Exception:
+            return _sp_ndimage.convolve(img, kernel, mode="constant", cval=0.0).astype(
+                np.float32
+            )
+        else:
+            # Manual NumPy-based fallback
             k = kernel.shape[0]
             pad = k // 2
-            padded = np.pad(img, ((pad, pad), (pad, pad)), mode='constant')
+            padded = np.pad(img, ((pad, pad), (pad, pad)), mode="constant")
             h, w = img.shape
             out = np.zeros((h, w), dtype=np.float32)
             ker = kernel[::-1, ::-1].astype(np.float32)
             for y in range(h):
                 for x in range(w):
-                    region = padded[y:y+k, x:x+k]
+                    region = padded[y : y + k, x : x + k]
                     out[y, x] = float(np.sum(region * ker))
             return out
 
@@ -948,23 +959,23 @@ class TinyCNN:
 
     def save(self, filepath: str):
         data = {
-            'filters': self.filters,
-            'kernel_size': self.kernel_size,
-            'num_filters': self.num_filters,
-            'learning_rate': self.learning_rate,
-            'is_trained': self.is_trained,
+            "filters": self.filters,
+            "kernel_size": self.kernel_size,
+            "num_filters": self.num_filters,
+            "learning_rate": self.learning_rate,
+            "is_trained": self.is_trained,
         }
-        with open(filepath, 'wb') as f:
+        with open(filepath, "wb") as f:
             pickle.dump(data, f)
 
     def load(self, filepath: str):
-        with open(filepath, 'rb') as f:
+        with open(filepath, "rb") as f:
             data = pickle.load(f)
-        self.filters = data['filters']
-        self.kernel_size = int(data['kernel_size'])
-        self.num_filters = int(data['num_filters'])
-        self.learning_rate = float(data['learning_rate'])
-        self.is_trained = bool(data['is_trained'])
+        self.filters = data["filters"]
+        self.kernel_size = int(data["kernel_size"])
+        self.num_filters = int(data["num_filters"])
+        self.learning_rate = float(data["learning_rate"])
+        self.is_trained = bool(data["is_trained"])
 
 
 # Global TinyCNN instance
@@ -976,7 +987,7 @@ def get_cnn(retrain=False):
     Get or create the global TinyCNN instance. Training is gated by env RECON_TRAIN_CNN.
     """
     global _global_cnn
-    model_path = '/tmp/recon_tinycnn.pkl'
+    model_path = "/tmp/recon_tinycnn.pkl"
     if _global_cnn is None:
         _global_cnn = TinyCNN(kernel_size=5, num_filters=6, learning_rate=0.02)
         # Try load existing
@@ -988,15 +999,14 @@ def get_cnn(retrain=False):
                 print("Failed to load TinyCNN, will train new one if enabled")
                 _global_cnn.is_trained = False
         # Optionally train
-        train_enabled = os.environ.get('RECON_TRAIN_CNN', '0') in ('1','true','True')
+        train_enabled = os.environ.get("RECON_TRAIN_CNN", "0") in ("1", "true", "True")
         if (not _global_cnn.is_trained or retrain) and train_enabled:
-            from .dataset import make_house_scene, make_barn_scene, make_varied_scene
             training_images = []
             for _ in range(20):
                 training_images.append(make_house_scene(noise=0.05))
                 training_images.append(make_barn_scene(noise=0.05))
-                training_images.append(make_varied_scene('house', noise=0.1))
-                training_images.append(make_varied_scene('barn', noise=0.1))
+                training_images.append(make_varied_scene("house", noise=0.1))
+                training_images.append(make_varied_scene("barn", noise=0.1))
             _global_cnn.train(training_images, epochs=10, patches_per_image=40)
             _global_cnn.save(model_path)
     return _global_cnn
@@ -1012,7 +1022,7 @@ def cnn_terminals_from_image(img):
     features = cnn.encode(img)
     terms = {}
     for i, v in enumerate(features):
-        terms[f't_cnn_{i}'] = float(v)
+        terms[f"t_cnn_{i}"] = float(v)
     return terms
 
 
