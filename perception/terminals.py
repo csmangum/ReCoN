@@ -30,7 +30,7 @@ try:
     
     def _sum_by_label(input_arr: np.ndarray, labels: np.ndarray, index) -> np.ndarray:
         return _sp_ndimage.sum(input_arr, labels, index)
-except Exception:  # pragma: no cover - provide lightweight fallbacks
+except ImportError:  # pragma: no cover - provide lightweight fallbacks
     # Lightweight NumPy-based fallbacks for environments without SciPy
     def _gaussian_kernel_1d(sigma: float) -> np.ndarray:
         radius = max(1, int(3 * float(sigma)))
