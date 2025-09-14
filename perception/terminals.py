@@ -637,6 +637,7 @@ def get_autoencoder(retrain=False):
     Returns:
         SimpleAutoencoder: The global autoencoder instance
     """
+    global _global_autoencoder
 
     model_path = "/tmp/recon_autoencoder.pkl"
 

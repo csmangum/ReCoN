@@ -68,12 +68,14 @@ class ReCoNSimulation:
         """Initialize the house recognition network topology."""
         g = Graph()
         # script units
-        for unit_id in ["u_root", "u_roof", "u_body", "u_door"]:
-            g.add_unit(Unit(unit_id, UnitType.SCRIPT, state=State.INACTIVE, a=0.0))
+        for init_unit_id in ["u_root", "u_roof", "u_body", "u_door"]:
+            g.add_unit(Unit(init_unit_id, UnitType.SCRIPT, state=State.INACTIVE, a=0.0))
         # terminals
-        for tid in ["t_mean", "t_vert", "t_horz"]:
+        for term_id in ["t_mean", "t_vert", "t_horz"]:
             g.add_unit(
-                Unit(tid, UnitType.TERMINAL, state=State.INACTIVE, a=0.0, thresh=0.5)
+                Unit(
+                    term_id, UnitType.TERMINAL, state=State.INACTIVE, a=0.0, thresh=0.5
+                )
             )
         # hierarchy: terminals -> scripts via SUB; parent -> child via SUR
         g.add_edge(Edge("t_horz", "u_roof", LinkType.SUB, w=1.0))
@@ -92,12 +94,12 @@ class ReCoNSimulation:
 
     def generate_scene(self):
         """Generate a new synthetic scene and initialize terminals."""
-        img, tvals = sample_scene_and_terminals()
+        img, tvals = sample_scene_and_terminals()  # scene_img is returned
         # seed terminals
-        for tid, val in tvals.items():
-            self.graph.units[tid].a = float(val)
-            self.graph.units[tid].state = (
-                State.REQUESTED if val > 0.1 else State.INACTIVE
+        for term_id, term_val in tvals.items():
+            self.graph.units[term_id].a = float(term_val)
+            self.graph.units[term_id].state = (
+                State.REQUESTED if term_val > 0.1 else State.INACTIVE
             )
         # energize root to start requests
         self.graph.units["u_root"].a = 1.0
@@ -112,9 +114,9 @@ class ReCoNSimulation:
         """Step the simulation forward and record history."""
         # Capture messages before stepping
         messages_this_step = []
-        for unit in self.graph.units.values():
-            for receiver_id, message in unit.outbox:
-                messages_this_step.append((unit.id, receiver_id, message))
+        for graph_unit in self.graph.units.values():
+            for receiver_id, message in graph_unit.outbox:
+                messages_this_step.append((graph_unit.id, receiver_id, message))
 
         # Step the simulation
         snap = self.engine.step(n_steps)
@@ -229,7 +231,7 @@ with col_scene:
     st.subheader("🏠 Scene with Fovea Path")
 
     # Get current scene
-    img = st.session_state.get("img", np.zeros((64, 64), dtype=np.float32))
+    current_img = st.session_state.get("img", np.zeros((64, 64), dtype=np.float32))
 
     # Create visualization with fovea path and overlays
     fig, (ax_scene, ax_bars) = plt.subplots(
@@ -237,7 +239,7 @@ with col_scene:
     )
 
     # Scene with overlays
-    ax_scene.imshow(img, cmap="gray", extent=[0, 64, 64, 0])
+    ax_scene.imshow(current_img, cmap="gray", extent=[0, 64, 64, 0])
 
     # Draw fovea path
     if len(st.session_state.sim.fovea_path) > 1:
@@ -258,13 +260,18 @@ with col_scene:
             "t_horz": (20, 32),  # left side
         }
 
-        for tid, val in st.session_state.tvals.items():
-            if tid in terminal_positions:
-                x, y = terminal_positions[tid]
-                color = "green" if val > 0.3 else "red"
-                size = 50 + val * 100  # Size based on activation
+        for term_name, term_value in st.session_state.tvals.items():
+            if term_name in terminal_positions:
+                x, y = terminal_positions[term_name]
+                color = "green" if term_value > 0.3 else "red"
+                size = 50 + term_value * 100  # Size based on activation
                 ax_scene.scatter(
-                    x, y, c=color, s=size, alpha=0.7, label=f"{tid} ({val:.2f})"
+                    x,
+                    y,
+                    c=color,
+                    s=size,
+                    alpha=0.7,
+                    label=f"{term_name} ({term_value:.2f})",
                 )
 
     ax_scene.set_xlim(0, 64)
@@ -281,8 +288,8 @@ with col_scene:
 
     for script_id in script_units:
         if script_id in st.session_state.sim.graph.units:
-            unit = st.session_state.sim.graph.units[script_id]
-            activations.append(unit.a)
+            script_unit = st.session_state.sim.graph.units[script_id]
+            activations.append(script_unit.a)
             labels.append(script_id.replace("u_", ""))
 
     if activations:
@@ -313,8 +320,8 @@ with col_scene:
     if "tvals" in st.session_state:
         st.write("**Terminal Activations:**")
         cols = st.columns(3)
-        for i, (tid, val) in enumerate(st.session_state.tvals.items()):
-            cols[i].metric(tid, f"{val:.3f}")
+        for i, (term_name, term_value) in enumerate(st.session_state.tvals.items()):
+            cols[i].metric(term_name, f"{term_value:.3f}")
 
 with col_graph:
     st.subheader("🕸️ Network Graph & Messages")
@@ -357,13 +364,13 @@ with col_graph:
     }
 
     # Add nodes with enhanced styling
-    for unit_id, unit in st.session_state.sim.graph.units.items():
-        state_name = unit.state.name
+    for node_id, graph_unit in st.session_state.sim.graph.units.items():
+        state_name = graph_unit.state.name
         G.add_node(
-            unit_id,
+            node_id,
             color=state_colors[state_name],
             size=state_sizes[state_name],
-            activation=round(unit.a, 2),
+            activation=round(graph_unit.a, 2),
             state=state_name,
         )
 
@@ -394,9 +401,7 @@ with col_graph:
     # Draw edges by type
     for link_type, style in edge_styles.items():
         edges_of_type = [
-            (u, v)
-            for u, v, d in G.edges(data=True)
-            if d.get("style") == style["style"]
+            (u, v) for u, v, d in G.edges(data=True) if d.get("style") == style["style"]
         ]
         if edges_of_type:
             nx.draw_networkx_edges(
@@ -646,7 +651,7 @@ st.info(
 
 # Show selected unit details
 if selected_unit:
-    unit = st.session_state.sim.graph.units[selected_unit]
+    selected_unit_obj = st.session_state.sim.graph.units[selected_unit]
     unit_snap = current_snap["units"][selected_unit]
 
     # Unit overview
@@ -678,9 +683,11 @@ if selected_unit:
         st.info(f"📥 Inbox: {unit_snap['inbox_size']} messages")
         st.info(f"📤 Outbox: {unit_snap['outbox_size']} messages")
 
-        if unit.inbox:
+        if selected_unit_obj.inbox:
             st.write("**Recent Inbox Messages:**")
-            for i, (sender, msg) in enumerate(unit.inbox[-3:]):  # Show last 3
+            for i, (sender, msg) in enumerate(
+                selected_unit_obj.inbox[-3:]
+            ):  # Show last 3
                 st.caption(f"• {sender} → {msg.name}")
 
     with detail_col2:
@@ -720,11 +727,11 @@ if selected_unit:
 # Summary table for all units
 st.write("**📈 All Units Overview:**")
 unit_data = []
-for unit_id, unit_data_dict in current_snap["units"].items():
-    unit = st.session_state.sim.graph.units[unit_id]
+for summary_unit_id, unit_data_dict in current_snap["units"].items():
+    summary_unit = st.session_state.sim.graph.units[summary_unit_id]
     unit_data.append(
         {
-            "Unit": unit_id,
+            "Unit": summary_unit_id,
             "Type": unit_data_dict["kind"],
             "State": unit_data_dict["state"],
             "Activation": round(unit_data_dict["a"], 3),
