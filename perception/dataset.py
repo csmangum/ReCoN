@@ -241,7 +241,7 @@ def make_varied_scene(scene_type='house', size=64, noise=0.05,
     Generate a scene with random variations in size and position.
 
     Args:
-        scene_type: Type of scene ('house', 'barn', 'occluded') (default: 'house')
+        scene_type: Type of scene ('house', 'barn', 'occluded', 'church', 'tent', 'tower') (default: 'house')
         size: Size of the square canvas (default: 64)
         noise: Standard deviation of Gaussian noise to add (default: 0.05)
         scale_range: (min, max) range for random scaling (default: (0.7, 1.3))
@@ -266,6 +266,152 @@ def make_varied_scene(scene_type='house', size=64, noise=0.05,
         occlusion_types = ['tree', 'cloud', 'box']
         occlusion = np.random.choice(occlusion_types)
         return make_occluded_scene(size, noise, occlusion)
+    elif scene_type == 'church':
+        return make_church_scene(size, noise, scale_factor, (offset_x, offset_y))
+    elif scene_type == 'tent':
+        return make_tent_scene(size, noise, scale_factor, (offset_x, offset_y))
+    elif scene_type == 'tower':
+        return make_tower_scene(size, noise, scale_factor, (offset_x, offset_y))
     else:
         # Default to house
         return make_house_scene(size, noise, scale_factor, (offset_x, offset_y))
+
+
+def make_church_scene(size=64, noise=0.05, scale_factor=1.0, position_offset=(0, 0)):
+    """
+    Generate a synthetic church scene with body, roof, and steeple.
+
+    Components:
+    - Rectangular body (0.7)
+    - Triangular roof (1.0)
+    - Narrow steeple with spire (0.95)
+
+    Returns:
+        numpy.ndarray: Generated church scene as float32 array in [0, 1]
+    """
+    img = canvas(size)
+
+    # Body
+    base_width = int((size // 3) * scale_factor)
+    base_height = int((size // 3) * scale_factor)
+    bw = max(6, base_width)
+    bh = max(6, base_height)
+    bx = max(0, min(size - bw, size // 2 - bw // 2 + position_offset[0]))
+    by = max(0, min(size - bh, size // 2 + position_offset[1]))
+    draw_rect(img, bx, by, bw, bh, 0.7)
+
+    # Roof
+    roof_height = max(3, bh // 2)
+    rx = bx
+    ry = max(0, by - roof_height)
+    if ry >= 0 and rx + bw <= size:
+        draw_triangle(img, rx, ry, bw, roof_height, 1.0)
+
+    # Steeple (narrow tall rectangle on right side)
+    steeple_width = max(2, bw // 8)
+    steeple_height = max(6, int(bh * 1.2))
+    sx = min(size - steeple_width, bx + int(0.75 * bw))
+    sy = max(0, ry - max(0, steeple_height - (by - ry)))  # extend above roof if needed
+    # Ensure steeple fits vertically
+    if sy + steeple_height > size:
+        sy = size - steeple_height
+    if 0 <= sx < size and 0 <= sy < size:
+        draw_rect(img, sx, sy, steeple_width, steeple_height, 0.95)
+
+    # Spire (small triangle atop steeple)
+    spire_height = max(3, steeple_width * 2)
+    spire_base = steeple_width * 2 + 1
+    spire_apex_y = max(0, sy - spire_height)
+    spire_x = max(0, min(size - spire_base, sx + steeple_width // 2 - spire_base // 2))
+    if spire_apex_y >= 0:
+        draw_triangle(img, spire_x, spire_apex_y, spire_base, spire_height, 1.0)
+
+    # Noise
+    if noise > 0:
+        img += noise * np.random.randn(*img.shape).astype(np.float32)
+        img = np.clip(img, 0.0, 1.0)
+
+    return img
+
+
+def make_tent_scene(size=64, noise=0.05, scale_factor=1.0, position_offset=(0, 0)):
+    """
+    Generate a synthetic tent scene as a large triangular structure.
+
+    Components:
+    - Triangular tent body (0.85)
+    - Dark entrance opening near base center (0.2)
+
+    Returns:
+        numpy.ndarray: Generated tent scene as float32 array in [0, 1]
+    """
+    img = canvas(size)
+
+    # Tent triangle dimensions
+    base = max(10, int((size // 2) * scale_factor))
+    height = max(8, int((size // 2) * scale_factor))
+    # Place base centered horizontally, apex above
+    left_x = max(0, min(size - base, size // 2 - base // 2 + position_offset[0]))
+    apex_y = max(0, min(size - height, size // 2 - height // 3 + position_offset[1]))
+    # Draw tent body
+    if apex_y >= 0 and left_x + base <= size:
+        draw_triangle(img, left_x, apex_y, base, height, 0.85)
+
+    # Entrance opening
+    entrance_w = max(2, base // 10)
+    entrance_h = max(3, height // 2)
+    entrance_x = max(0, min(size - entrance_w, left_x + base // 2 - entrance_w // 2))
+    entrance_y = max(0, min(size - entrance_h, apex_y + height - entrance_h))
+    draw_rect(img, entrance_x, entrance_y, entrance_w, entrance_h, 0.2)
+
+    # Noise
+    if noise > 0:
+        img += noise * np.random.randn(*img.shape).astype(np.float32)
+        img = np.clip(img, 0.0, 1.0)
+
+    return img
+
+
+def make_tower_scene(size=64, noise=0.05, scale_factor=1.0, position_offset=(0, 0)):
+    """
+    Generate a synthetic tower scene with a tall body and windows.
+
+    Components:
+    - Tall rectangular tower body (0.65)
+    - Small bright windows (0.9)
+    - Slightly brighter top cap (0.85)
+
+    Returns:
+        numpy.ndarray: Generated tower scene as float32 array in [0, 1]
+    """
+    img = canvas(size)
+
+    # Tower body dimensions (tall and narrow)
+    tw = max(5, int((size // 6) * scale_factor))
+    th = max(20, int((size * 0.6) * scale_factor))
+    tx = max(0, min(size - tw, size // 2 - tw // 2 + position_offset[0]))
+    ty = max(0, min(size - th, size // 2 - th // 2 + position_offset[1]))
+    draw_rect(img, tx, ty, tw, th, 0.65)
+
+    # Top cap
+    cap_h = max(2, th // 10)
+    if ty - cap_h >= 0:
+        cap_y = ty - cap_h
+        cap_x = max(0, min(size - tw, tx))
+        draw_rect(img, cap_x, cap_y, tw, cap_h, 0.85)
+
+    # Windows (two or three small squares stacked)
+    win_size = max(2, tw // 3)
+    num_windows = max(2, min(4, th // (win_size * 2)))
+    for i in range(num_windows):
+        wx = tx + tw // 2 - win_size // 2
+        wy = ty + (i + 1) * (th // (num_windows + 1)) - win_size // 2
+        if 0 <= wx < size and 0 <= wy < size and wx + win_size <= size and wy + win_size <= size:
+            draw_rect(img, wx, wy, win_size, win_size, 0.9)
+
+    # Noise
+    if noise > 0:
+        img += noise * np.random.randn(*img.shape).astype(np.float32)
+        img = np.clip(img, 0.0, 1.0)
+
+    return img
