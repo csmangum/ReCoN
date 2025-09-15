@@ -641,7 +641,14 @@ def get_autoencoder(retrain=False):
     """
     global _global_autoencoder
 
-    model_path = "/tmp/recon_autoencoder.pkl"
+    # Resolve model directory (configurable via env var)
+    model_dir = os.environ.get("RECON_MODEL_DIR", os.path.expanduser("~/.cache/recon"))
+    try:
+        os.makedirs(model_dir, exist_ok=True)
+    except Exception:
+        # Fallback to /tmp if unable to create preferred directory
+        model_dir = "/tmp"
+    model_path = os.path.join(model_dir, "recon_autoencoder.pkl")
 
     if _global_autoencoder is None:
         _global_autoencoder = SimpleAutoencoder(patch_size=8, latent_dim=4)
@@ -657,7 +664,8 @@ def get_autoencoder(retrain=False):
 
         # Train if needed and enabled via env var
         train_enabled = os.environ.get("RECON_TRAIN_AE", "0") in ("1", "true", "True")
-        if (not _global_autoencoder.is_trained or retrain) and train_enabled:
+        # Allow explicit retrain to bypass env gating
+        if (not _global_autoencoder.is_trained or retrain) and (train_enabled or retrain):
             print("Training autoencoder...")
             # Generate diverse training data
             training_images = []
@@ -667,7 +675,12 @@ def get_autoencoder(retrain=False):
                 training_images.append(make_varied_scene("house", noise=0.1))
                 training_images.append(make_varied_scene("barn", noise=0.1))
 
-            _global_autoencoder.train(training_images, n_epochs=30)
+            # Optional epoch override for responsiveness in UI demos
+            try:
+                n_epochs = int(os.environ.get("RECON_TRAIN_AE_EPOCHS", "30"))
+            except ValueError:
+                n_epochs = 30
+            _global_autoencoder.train(training_images, n_epochs=n_epochs)
             _global_autoencoder.save(model_path)
 
     return _global_autoencoder
@@ -987,7 +1000,13 @@ def get_cnn(retrain=False):
     Get or create the global TinyCNN instance. Training is gated by env RECON_TRAIN_CNN.
     """
     global _global_cnn
-    model_path = "/tmp/recon_tinycnn.pkl"
+    # Resolve model directory (configurable via env var)
+    model_dir = os.environ.get("RECON_MODEL_DIR", os.path.expanduser("~/.cache/recon"))
+    try:
+        os.makedirs(model_dir, exist_ok=True)
+    except Exception:
+        model_dir = "/tmp"
+    model_path = os.path.join(model_dir, "recon_tinycnn.pkl")
     if _global_cnn is None:
         _global_cnn = TinyCNN(kernel_size=5, num_filters=6, learning_rate=0.02)
         # Try load existing
@@ -1000,14 +1019,20 @@ def get_cnn(retrain=False):
                 _global_cnn.is_trained = False
         # Optionally train
         train_enabled = os.environ.get("RECON_TRAIN_CNN", "0") in ("1", "true", "True")
-        if (not _global_cnn.is_trained or retrain) and train_enabled:
+        # Allow explicit retrain to bypass env gating
+        if (not _global_cnn.is_trained or retrain) and (train_enabled or retrain):
             training_images = []
             for _ in range(20):
                 training_images.append(make_house_scene(noise=0.05))
                 training_images.append(make_barn_scene(noise=0.05))
                 training_images.append(make_varied_scene("house", noise=0.1))
                 training_images.append(make_varied_scene("barn", noise=0.1))
-            _global_cnn.train(training_images, epochs=10, patches_per_image=40)
+            # Optional epoch override for responsiveness in UI demos
+            try:
+                epochs = int(os.environ.get("RECON_TRAIN_CNN_EPOCHS", "10"))
+            except ValueError:
+                epochs = 10
+            _global_cnn.train(training_images, epochs=epochs, patches_per_image=40)
             _global_cnn.save(model_path)
     return _global_cnn
 

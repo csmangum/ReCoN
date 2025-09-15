@@ -29,7 +29,17 @@ import networkx as nx
 import numpy as np
 import streamlit as st
 
-from perception.terminals import sample_scene_and_terminals
+from perception.terminals import (
+    sample_scene_and_terminals,
+    advanced_terminals_from_image,
+    autoencoder_terminals_from_image,
+    comprehensive_terminals_from_image,
+    deep_comprehensive_terminals_from_image,
+    cnn_terminals_from_image,
+    get_autoencoder,
+    get_cnn,
+)
+from perception.dataset import make_house_scene
 from recon_core.engine import Engine
 from recon_core.enums import LinkType, State, UnitType
 from recon_core.graph import Edge, Graph, Unit
@@ -77,13 +87,9 @@ class ReCoNSimulation:
         # script units
         for init_unit_id in ["u_root", "u_roof", "u_body", "u_door"]:
             g.add_unit(Unit(init_unit_id, UnitType.SCRIPT, state=State.INACTIVE, a=0.0))
-        # terminals
+        # initial minimal terminals (will be rebuilt dynamically on Generate Scene)
         for term_id in ["t_mean", "t_vert", "t_horz"]:
-            g.add_unit(
-                Unit(
-                    term_id, UnitType.TERMINAL, state=State.INACTIVE, a=0.0, thresh=0.5
-                )
-            )
+            g.add_unit(Unit(term_id, UnitType.TERMINAL, state=State.INACTIVE, a=0.0, thresh=0.5))
         # hierarchy: terminals -> scripts via SUB; parent -> child via SUR
         g.add_edge(Edge("t_horz", "u_roof", LinkType.SUB, w=1.0))
         g.add_edge(Edge("t_mean", "u_body", LinkType.SUB, w=1.0))
@@ -99,22 +105,82 @@ class ReCoNSimulation:
         g.add_edge(Edge("u_body", "u_door", LinkType.POR, w=1.0))
         return g
 
-    def generate_scene(self):
-        """Generate a new synthetic scene and initialize terminals."""
-        img, tvals = sample_scene_and_terminals()  # img is the scene image
-        # seed terminals
-        for term_id, term_val in tvals.items():
-            self.graph.units[term_id].a = float(term_val)
-            self.graph.units[term_id].state = (
-                State.REQUESTED if term_val > 0.1 else State.INACTIVE
-            )
-        # energize root to start requests
+    def _remove_existing_terminals(self):
+        """Remove all existing TERMINAL units and associated edges."""
+        terminal_ids = [uid for uid, u in self.graph.units.items() if u.kind == UnitType.TERMINAL]
+        if not terminal_ids:
+            return
+        # Remove edges touching terminals
+        for src_id, edges in list(self.graph.out_edges.items()):
+            self.graph.out_edges[src_id] = [e for e in edges if e.src not in terminal_ids and e.dst not in terminal_ids]
+        for dst_id, edges in list(self.graph.in_edges.items()):
+            self.graph.in_edges[dst_id] = [e for e in edges if e.src not in terminal_ids and e.dst not in terminal_ids]
+        # Remove terminal units
+        for tid in terminal_ids:
+            self.graph.units.pop(tid, None)
+            self.graph.out_edges.pop(tid, None)
+            self.graph.in_edges.pop(tid, None)
+
+    def _choose_parent_for_terminal(self, term_id: str) -> str:
+        lid = term_id.lower()
+        if term_id == "t_horz":
+            return "u_roof"
+        if term_id == "t_vert":
+            return "u_door"
+        if term_id == "t_mean":
+            return "u_body"
+        if any(k in lid for k in ["door"]):
+            return "u_door"
+        if any(k in lid for k in ["rect", "texture", "contrast", "n_shape", "aspect", "compact"]):
+            return "u_body"
+        if any(k in lid for k in ["corner", "edge", "orient", "triangle", "vsym", "line_aniso"]):
+            return "u_roof"
+        if lid.startswith("t_ae_") or lid.startswith("t_cnn_"):
+            try:
+                idx = int(lid.split("_")[-1])
+            except Exception:
+                idx = 0
+            return ["u_roof", "u_body", "u_door"][idx % 3]
+        return "u_body"
+
+    def _rebuild_terminals(self, terminals: dict):
+        self._remove_existing_terminals()
+        for term_id, _ in terminals.items():
+            self.graph.add_unit(Unit(term_id, UnitType.TERMINAL, state=State.INACTIVE, a=0.0, thresh=0.5))
+            parent = self._choose_parent_for_terminal(term_id)
+            self.graph.add_edge(Edge(term_id, parent, LinkType.SUB, w=1.0))
+            if term_id == "t_mean":
+                self.graph.add_edge(Edge(term_id, "u_door", LinkType.SUB, w=0.6))
+        for term_id, term_val in terminals.items():
+            u = self.graph.units[term_id]
+            u.a = float(term_val)
+            u.state = State.REQUESTED if term_val > 0.1 else State.INACTIVE
+
+    def generate_scene(self, feature_source: str = "Basic"):
+        """Generate a new scene and initialize terminals based on selected feature source."""
+        img = make_house_scene()
+        if feature_source == "Basic":
+            _, tvals = sample_scene_and_terminals()
+        elif feature_source == "Advanced":
+            tvals = advanced_terminals_from_image(img)
+        elif feature_source == "Autoencoder":
+            tvals = autoencoder_terminals_from_image(img)
+        elif feature_source == "CNN":
+            tvals = cnn_terminals_from_image(img)
+        elif feature_source == "Comprehensive":
+            tvals = comprehensive_terminals_from_image(img)
+        elif feature_source == "Deep Comprehensive":
+            tvals = deep_comprehensive_terminals_from_image(img)
+        else:
+            _, tvals = sample_scene_and_terminals()
+
+        self._rebuild_terminals(tvals)
         self.graph.units["u_root"].a = 1.0
         self.graph.units["u_root"].state = State.ACTIVE
         self.engine.t = 0
         self.history = []
         self.message_history = []
-        self.fovea_path = [(32, 32)]  # Start at center
+        self.fovea_path = [(32, 32)]
         return img, tvals
 
     def step_simulation(self, n_steps=1):
@@ -190,10 +256,42 @@ with st.sidebar:
 
     # Scene controls
     st.caption("Scene")
+    # Feature source selection
+    feature_source = st.selectbox(
+        "Feature source",
+        [
+            "Basic",
+            "Advanced",
+            "Autoencoder",
+            "CNN",
+            "Comprehensive",
+            "Deep Comprehensive",
+        ],
+        index=0,
+        help="Choose which feature extractor to seed terminal activations with.",
+    )
+
+    # Training controls
+    with st.expander("Training (AE/CNN)"):
+        col_train_ae, col_train_cnn = st.columns(2)
+        with col_train_ae:
+            ae_epochs = st.number_input("AE epochs", min_value=1, max_value=200, value=10, step=1)
+            if st.button("Train AE", use_container_width=True):
+                os.environ["RECON_TRAIN_AE_EPOCHS"] = str(int(ae_epochs))
+                # Force retrain regardless of env gate
+                _ = get_autoencoder(retrain=True)
+                st.success("Autoencoder trained and cached.")
+        with col_train_cnn:
+            cnn_epochs = st.number_input("CNN epochs", min_value=1, max_value=200, value=5, step=1)
+            if st.button("Train CNN", use_container_width=True):
+                os.environ["RECON_TRAIN_CNN_EPOCHS"] = str(int(cnn_epochs))
+                _ = get_cnn(retrain=True)
+                st.success("TinyCNN trained and cached.")
+
     col_scene_gen, col_scene_reset = st.columns(2)
     with col_scene_gen:
         if st.button("🎲 Generate Scene", type="primary", use_container_width=True):
-            img, terminal_vals = st.session_state.sim.generate_scene()
+            img, terminal_vals = st.session_state.sim.generate_scene(feature_source)
             st.session_state.img = img
             st.session_state.tvals = terminal_vals
             st.session_state.snap = st.session_state.sim.engine.snapshot()
@@ -389,16 +487,19 @@ with col_graph:
         "SUPPRESSED": 350,
     }
 
-    # Node layout positions (fixed for consistency)
+    # Node layout positions (dynamic terminals placed on top row)
     pos = {
         "u_root": (0, 0),
         "u_roof": (-1, 1),
         "u_body": (0, 1),
         "u_door": (1, 1),
-        "t_mean": (0, 2),
-        "t_vert": (-1, 2),
-        "t_horz": (1, 2),
     }
+    # Place terminal nodes evenly across top row
+    terminal_nodes = [n for n, d in st.session_state.sim.graph.units.items() if d.kind == UnitType.TERMINAL]
+    if terminal_nodes:
+        xs = np.linspace(-1.5, 1.5, num=len(terminal_nodes))
+        for x, n in zip(xs, terminal_nodes):
+            pos[n] = (float(x), 2.0)
 
     # Add nodes with enhanced styling
     for node_id, graph_unit in st.session_state.sim.graph.units.items():
