@@ -39,6 +39,7 @@ from perception.terminals import sample_scene_and_terminals
 from recon_core.engine import Engine
 from recon_core.enums import LinkType, State, UnitType
 from recon_core.graph import Edge, Graph, Unit
+from viz.utils import build_cytoscape_elements
 
 # Speed control mapping constants
 SPEED_DELAY_MAPPING = {
@@ -167,56 +168,7 @@ class ReCoNSimulation:
 
 
 def build_cytoscape_elements_from_graph(sim):
-    """Build Cytoscape elements from current simulation graph/state."""
-    elements = []
-    # Nodes
-    for node_id, graph_unit in sim.graph.units.items():
-        state_name = graph_unit.state.name
-        activation = float(getattr(graph_unit, "a", 0.0))
-        # Size based on activation
-        default_size = max(16, min(64, int(16 + activation * 48)))
-        # Color by state
-        state_colors = {
-            "INACTIVE": "#9CA3AF",
-            "REQUESTED": "#60A5FA",
-            "WAITING": "#F59E0B",
-            "ACTIVE": "#A78BFA",
-            "TRUE": "#10B981",
-            "CONFIRMED": "#22C55E",
-            "FAILED": "#EF4444",
-            "SUPPRESSED": "#6B7280",
-        }
-        # Allow meta overrides
-        meta = getattr(graph_unit, "meta", {}) or {}
-        color = meta.get("color") or state_colors.get(state_name, "#60A5FA")
-        size = int(meta.get("size") or default_size)
-        label = meta.get("label") or node_id
-        elements.append({
-            "data": {
-                "id": node_id,
-                "label": label,
-                "color": color,
-                "size": size,
-                "group": getattr(graph_unit, "kind", "unit"),
-                "state": state_name,
-                "activation": activation,
-            }
-        })
-    # Edges
-    for src_id, edges in sim.graph.out_edges.items():
-        for e in edges:
-            edge_type = e.type.name if hasattr(e, "type") else "EDGE"
-            weight = float(getattr(e, "w", 1.0))
-            elements.append({
-                "data": {
-                    "id": f"{e.src}->{e.dst}:{edge_type}",
-                    "source": e.src,
-                    "target": e.dst,
-                    "weight": weight,
-                    "edgeType": edge_type,
-                }
-            })
-    return elements
+    return build_cytoscape_elements(sim.graph)
 
 
 def render_cytoscape_html(elements, height=780, enable_two_way=False):
@@ -358,6 +310,15 @@ def render_cytoscape_html(elements, height=780, enable_two_way=False):
         const q = searchInput.value.trim().toLowerCase(); cy.elements().removeClass('faded'); if (!q) return;
         const matched = cy.nodes().filter(n => (n.data('label') || '').toLowerCase().includes(q));
         cy.elements().addClass('faded'); matched.neighborhood().add(matched).removeClass('faded');
+      }});
+
+      // Persist position on drag
+      cy.on('dragfree', 'node', (evt) => {{
+        const n = evt.target; const pos = n.position();
+        const payload = {{ type: 'node_moved', id: n.id(), pos }};
+        if (window.parent && window.parent.postMessage) {{
+          window.parent.postMessage(payload, '*');
+        }}
       }});
 
       // Inspector sync
