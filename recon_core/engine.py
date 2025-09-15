@@ -220,6 +220,18 @@ class Engine:
             float: Gate output value (0.0 if no propagation, positive/negative otherwise)
         """
         state = unit.state
+        a = getattr(unit, "a", 0.0)
+
+        # Optional minimal activation thresholds per link type
+        # If the source activation is below the configured minimum, suppress output
+        if link_type == LinkType.SUB and a < self.config.sub_min_source_activation:
+            return 0.0
+        if link_type == LinkType.SUR and a < self.config.sur_min_source_activation:
+            return 0.0
+        if link_type == LinkType.POR and a < self.config.por_min_source_activation:
+            return 0.0
+        if link_type == LinkType.RET and a < self.config.ret_min_source_activation:
+            return 0.0
 
         if link_type == LinkType.SUB:
             # SUB: child -> parent evidence propagation

@@ -152,6 +152,11 @@ print(steps_to_first_confirm(engine, 'u_root'))
 print(binary_precision_recall([1,0,1],[1,1,0]))
 ```
 
+Configuration notes:
+
+- Gate constants (SUB/SUR/POR/RET) are implemented with concrete defaults matching the paper’s qualitative behavior and are configurable via `EngineConfig`.
+- Optional per-link minimal source activation thresholds can be set to suppress propagation unless the source activation exceeds a chosen value: `sub_min_source_activation`, `sur_min_source_activation`, `por_min_source_activation`, `ret_min_source_activation` (all default to 0.0 to preserve baseline behavior).
+
 **44+ tests** covering:
 - **18 synthetic scene tests**: Drawing primitives, house/barn generation, occlusion, variations
 - **26 terminal feature tests**: Basic filters, SIFT-like features, autoencoder, integration

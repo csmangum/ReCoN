@@ -227,6 +227,29 @@ def test_integration_scenario():
     # Root should be CONFIRMED
     assert snapshot['units']['root']['state'] == 'CONFIRMED'
 
+def test_ret_feedback_demotes_predecessor_when_enabled():
+    """RET feedback demotes confirmed predecessor when successor fails and policy enabled."""
+    from recon_core.enums import UnitType, State, LinkType
+    from recon_core.graph import Graph, Unit, Edge
+    from recon_core.engine import Engine
+    from recon_core.config import EngineConfig
+
+    g = Graph()
+    pred = Unit('pred', UnitType.SCRIPT, state=State.CONFIRMED, a=0.9)
+    succ = Unit('succ', UnitType.SCRIPT, state=State.FAILED, a=0.2)
+    g.add_unit(pred)
+    g.add_unit(succ)
+    # RET from successor to predecessor
+    g.add_edge(Edge('succ', 'pred', LinkType.RET, w=1.0))
+
+    # Enable ret_feedback policy
+    cfg = EngineConfig(ret_feedback_enabled=True)
+    engine = Engine(g, config=cfg)
+
+    # One update should demote pred from CONFIRMED to ACTIVE due to failed successor
+    engine.step(1)
+    assert g.units['pred'].state == State.ACTIVE
+
 def test_script_compiler():
     """Test YAML->Graph compiler builds expected topology and POR sequence."""
     import os
@@ -304,7 +327,7 @@ def main():
     test_suites = [
         ([test_basic_functionality], "Basic Functionality Tests"),
         ([test_graph_operations], "Graph Operations Tests"),
-        ([test_engine_operations], "Engine Operations Tests"),
+        ([test_engine_operations, test_ret_feedback_demotes_predecessor_when_enabled], "Engine Operations Tests"),
         ([test_message_system], "Message System Tests"),
         ([test_learning_system], "Learning System Tests"),
         ([test_state_machine], "State Machine Tests"),
@@ -372,7 +395,7 @@ if __name__ == "__main__":
             suites = [
                 ([test_basic_functionality], "Basic Functionality Tests"),
                 ([test_graph_operations], "Graph Operations Tests"),
-                ([test_engine_operations], "Engine Operations Tests"),
+                ([test_engine_operations, test_ret_feedback_demotes_predecessor_when_enabled], "Engine Operations Tests"),
                 ([test_message_system], "Message System Tests"),
                 ([test_learning_system], "Learning System Tests"),
                 ([test_state_machine], "State Machine Tests"),
