@@ -6,13 +6,11 @@ Network (ReCoN) dynamics with enhanced visualization features. Users can generat
 synthetic scenes, watch the network process them through multiple time steps, and
 visualize both the scene and the network's internal state in real-time.
 
-Enhanced interface includes:
-- Scene generation with synthetic geometric shapes and fovea path visualization
-- Interactive network graph visualization with state-based coloring and animations
-- Message flow animations showing communication between units
-- Step-by-step simulation control with run/pause/reset functionality
-- Timeline scrubber for reviewing network evolution
-- Detailed unit information panels
+Minimal interface includes:
+- Clean two-panel layout: Scene and Network
+- Essential controls only: Generate, Step, Run/Pause, Reset
+- Dark mode by default with high-contrast charts
+- Compact status bar; advanced details moved to expanders
 """
 
 import os
@@ -34,17 +32,29 @@ from recon_core.engine import Engine
 from recon_core.enums import LinkType, State, UnitType
 from recon_core.graph import Edge, Graph, Unit
 
-st.set_page_config(layout="wide", page_title="ReCoN Demo")
+st.set_page_config(layout="wide", page_title="ReCoN Demo", initial_sidebar_state="collapsed")
 
-# Global visual styles
-plt.style.use("seaborn-v0_8-whitegrid")
+# Global visual styles (dark mode)
+plt.style.use("dark_background")
 st.markdown(
     """
     <style>
-    .block-container { padding-top: 0.5rem; padding-bottom: 2rem; }
-    [data-testid="stSidebar"] { background-color: rgba(15, 23, 42, 0.03); }
-    div[data-testid="stMetricValue"] { font-size: 1.3rem; }
-    div[data-testid="stMetricLabel"] { color: #64748b; }
+    :root {
+        --bg: #0b1220;
+        --panel: #0f172a;
+        --muted: #94a3b8;
+        --text: #e5e7eb;
+        --accent: #60a5fa;
+        --border: #1f2937;
+    }
+    html, body, .block-container { background-color: var(--bg) !important; color: var(--text) !important; }
+    .block-container { padding-top: 0.6rem; padding-bottom: 1.25rem; }
+    [data-testid="stSidebar"] { background-color: var(--panel) !important; color: var(--text) !important; }
+    .stButton>button { background: #111827; color: var(--text); border: 1px solid var(--border); border-radius: 10px; }
+    .stButton>button:hover { border-color: var(--accent); }
+    .stMetric { background: rgba(255,255,255,0.04); border: 1px solid var(--border); padding: 0.35rem 0.5rem; border-radius: 8px; }
+    .stDataFrame { background: var(--panel); }
+    h1,h2,h3,h4 { color: var(--text); }
     </style>
     """,
     unsafe_allow_html=True,
@@ -157,88 +167,59 @@ class ReCoNSimulation:
 if "sim" not in st.session_state:
     st.session_state.sim = ReCoNSimulation()
 
-st.title("🖼️ Request Confirmation Network — Interactive Demo")
+st.title("🖼️ ReCoN — Minimal Interactive Demo")
 
-# Control panel
-st.sidebar.header("🎛️ Controls")
-
-col_gen, col_ctrl = st.sidebar.columns(2)
-with col_gen:
-    if st.button("🎲 Generate Scene", type="primary"):
+"""Top control bar with core actions"""
+ctrl_col1, ctrl_col2, ctrl_col3, ctrl_col4 = st.columns(4)
+with ctrl_col1:
+    if st.button("🎲 Generate Scene", use_container_width=True):
         img, terminal_vals = st.session_state.sim.generate_scene()
         st.session_state.img = img
         st.session_state.tvals = terminal_vals
         st.session_state.snap = st.session_state.sim.engine.snapshot()
         st.rerun()
-
-with col_ctrl:
-    if st.button("🔄 Reset"):
+with ctrl_col2:
+    if st.button("⏭️ Step", use_container_width=True):
+        st.session_state.snap = st.session_state.sim.step_simulation(1)
+        st.rerun()
+with ctrl_col3:
+    run_label = "▶️ Run" if not st.session_state.sim.is_running else "⏸️ Pause"
+    if st.button(run_label, type="primary", use_container_width=True):
+        st.session_state.sim.is_running = not st.session_state.sim.is_running
+        st.rerun()
+with ctrl_col4:
+    if st.button("🔄 Reset", use_container_width=True):
         st.session_state.snap = st.session_state.sim.reset_simulation()
         st.rerun()
 
-# Simulation controls
-col_step, col_run, col_pause = st.sidebar.columns(3)
-with col_step:
-    if st.button("⏭️ Step"):
-        st.session_state.snap = st.session_state.sim.step_simulation(1)
-        st.rerun()
-
-with col_run:
-    if st.button("▶️ Run", type="primary"):
-        st.session_state.sim.is_running = True
-        st.rerun()
-
-with col_pause:
-    if st.button("⏸️ Pause"):
-        st.session_state.sim.is_running = False
-        st.rerun()
-
-# Auto-run logic
+# Auto-run logic (minimal)
 if st.session_state.sim.is_running:
     st.session_state.snap = st.session_state.sim.step_simulation(1)
-    time.sleep(0.5)  # Control animation speed
+    time.sleep(0.35)
     st.rerun()
 
-# Timeline scrubber
-if len(st.session_state.sim.history) > 1:
-    timeline_idx = st.sidebar.slider(
-        "⏱️ Timeline",
-        0,
-        len(st.session_state.sim.history) - 1,
-        len(st.session_state.sim.history) - 1,
-    )
-    current_snap = st.session_state.sim.history[timeline_idx]
-elif st.session_state.sim.history:
-    timeline_idx = 0
-    current_snap = st.session_state.sim.history[0]
-else:
-    timeline_idx = 0
-    current_snap = st.session_state.get("snap", st.session_state.sim.engine.snapshot())
+# Current snapshot
+current_snap = st.session_state.get("snap", st.session_state.sim.engine.snapshot())
 
-# Unit selector for hover functionality (moved to sidebar for scoping)
-st.sidebar.header("🔍 Unit Inspection")
+# Persist selected unit in session for highlighting
 unit_options = list(st.session_state.sim.graph.units.keys())
-selected_unit = st.sidebar.selectbox(
-    "Select unit for details:",
-    unit_options,
-    index=unit_options.index("u_root") if "u_root" in unit_options else 0,
-)
+if "unit_select" not in st.session_state:
+    st.session_state.unit_select = (
+        "u_root" if "u_root" in unit_options else (unit_options[0] if unit_options else "")
+    )
+selected_unit = st.session_state.unit_select
 
 # Main display
 col_scene, col_graph = st.columns([1, 1.2])
 
 with col_scene:
-    st.subheader("🏠 Scene with Fovea Path")
+    st.subheader("🏠 Scene")
 
     # Get current scene
     current_img = st.session_state.get("img", np.zeros((64, 64), dtype=np.float32))
 
-    # Create visualization with fovea path and overlays
-    fig, (ax_scene, ax_bars) = plt.subplots(
-        1, 2, figsize=(10, 5), gridspec_kw={"width_ratios": [2, 1]}
-    )
-
-    # Scene with overlays
+    # Create minimal visualization with fovea path and overlays
+    fig, ax_scene = plt.subplots(1, 1, figsize=(6, 6))
     ax_scene.imshow(current_img, cmap="gray", extent=[0, 64, 64, 0])
 
     # Draw fovea path
@@ -276,43 +257,7 @@ with col_scene:
 
     ax_scene.set_xlim(0, 64)
     ax_scene.set_ylim(64, 0)  # Flip y-axis for image coordinates
-    ax_scene.legend(
-        bbox_to_anchor=(1.05, 1), loc="upper left", frameon=False, fontsize=8
-    )
-    ax_scene.set_title("Scene with Attention Path & Terminal Detections")
-
-    # Confidence bars for script units
-    script_units = ["u_root", "u_roof", "u_body", "u_door"]
-    activations = []
-    labels = []
-
-    for script_id in script_units:
-        if script_id in st.session_state.sim.graph.units:
-            script_unit = st.session_state.sim.graph.units[script_id]
-            activations.append(script_unit.a)
-            labels.append(script_id.replace("u_", ""))
-
-    if activations:
-        bars = ax_bars.barh(
-            labels, activations, color=["#2ca25f", "#6baed6", "#fdae6b", "#de2d26"]
-        )
-        ax_bars.set_xlim(0, 1)
-        ax_bars.set_xlabel("Confidence")
-        ax_bars.set_title("Part Confidence Levels")
-
-        # Add value labels on bars
-        for bar, activation in zip(bars, activations):
-            ax_bars.text(
-                activation + 0.01,
-                bar.get_y() + bar.get_height() / 2,
-                f"{activation:.2f}",
-                ha="left",
-                va="center",
-                fontsize=9,
-            )
-
-    ax_bars.grid(True, alpha=0.3)
-
+    ax_scene.set_title("Scene with Attention & Detections", fontsize=11)
     plt.tight_layout()
     st.pyplot(fig, use_container_width=True)
 
@@ -324,10 +269,10 @@ with col_scene:
             cols[i].metric(term_name, f"{term_value:.3f}")
 
 with col_graph:
-    st.subheader("🕸️ Network Graph & Messages")
+    st.subheader("🕸️ Network")
 
-    # Create enhanced graph visualization
-    fig, (ax_graph, ax_msgs) = plt.subplots(2, 1, figsize=(8, 10), height_ratios=[2, 1])
+    # Create minimal graph visualization
+    fig, ax_graph = plt.subplots(1, 1, figsize=(8, 8))
 
     # Build NetworkX graph for visualization
     G = nx.DiGraph()
@@ -412,7 +357,7 @@ with col_graph:
                 style=style["style"],
                 alpha=style["alpha"],
                 arrows=True,
-                arrowsize=15,
+                arrowsize=12,
                 ax=ax_graph,
             )
 
@@ -444,213 +389,20 @@ with col_graph:
         edge_labels[(u, v)] = f"{w:.1f}" if isinstance(w, (int, float)) else ""
     nx.draw_networkx_edge_labels(G, pos, edge_labels, font_size=8, ax=ax_graph)
 
-    ax_graph.set_title(
-        f"Network State (t={current_snap['t']}) - Yellow outline shows selected unit"
-    )
+    ax_graph.set_title(f"Network State (t={current_snap['t']})")
     ax_graph.axis("off")
-
-    # Animated message arrows on the graph
-    # Draw message arrows between units for the current time step
-    if (
-        st.session_state.sim.message_history
-        and len(st.session_state.sim.message_history) > timeline_idx
-    ):
-        messages = st.session_state.sim.message_history[timeline_idx]
-
-        # Define arrow styles for different message types
-        arrow_styles = {
-            "REQUEST": {
-                "color": "#6baed6",
-                "width": 1,
-                "style": "-",
-                "alpha": 0.8,
-                "label": "→",
-            },
-            "CONFIRM": {
-                "color": "#31a354",
-                "width": 3,
-                "style": "-",
-                "alpha": 0.9,
-                "label": "⇒",
-            },
-            "WAIT": {
-                "color": "#fdae6b",
-                "width": 2,
-                "style": "--",
-                "alpha": 0.7,
-                "label": "⇄",
-            },
-            "INHIBIT_REQUEST": {
-                "color": "#de2d26",
-                "width": 2,
-                "style": ":",
-                "alpha": 0.8,
-                "label": "↔",
-            },
-            "INHIBIT_CONFIRM": {
-                "color": "#756bb1",
-                "width": 2,
-                "style": "-.",
-                "alpha": 0.8,
-                "label": "⇔",
-            },
-        }
-
-        # Draw arrows for each message
-        for sender, receiver, msg in messages[
-            -8:
-        ]:  # Show last 8 messages to avoid clutter
-            if sender in pos and receiver in pos:
-                style = arrow_styles.get(
-                    msg.name,
-                    {
-                        "color": "#666666",
-                        "width": 1,
-                        "style": "-",
-                        "alpha": 0.5,
-                        "label": "?",
-                    },
-                )
-
-                # Calculate arrow positions with slight offset to avoid overlapping nodes
-                sender_pos = pos[sender]
-                receiver_pos = pos[receiver]
-
-                # Add small offset for multiple messages between same units
-                offset = (
-                    messages.index((sender, receiver, msg)) * 0.05
-                )  # Small offset for each message
-                dx = receiver_pos[0] - sender_pos[0]
-                dy = receiver_pos[1] - sender_pos[1]
-                length = (dx**2 + dy**2) ** 0.5
-
-                if length > 0:
-                    # Perpendicular offset for parallel arrows
-                    perp_x = -dy / length * offset
-                    perp_y = dx / length * offset
-
-                    start_x = sender_pos[0] + perp_x
-                    start_y = sender_pos[1] + perp_y
-                    end_x = receiver_pos[0] + perp_x
-                    end_y = receiver_pos[1] + perp_y
-
-                    # Draw the message arrow
-                    ax_graph.annotate(
-                        "",
-                        xy=(end_x, end_y),
-                        xytext=(start_x, start_y),
-                        arrowprops=dict(
-                            arrowstyle="->",
-                            color=style["color"],
-                            linewidth=style["width"],
-                            linestyle=style["style"],
-                            alpha=style["alpha"],
-                            shrinkA=25,  # Shrink from start point
-                            shrinkB=25,  # Shrink from end point
-                        ),
-                        zorder=10,
-                    )  # Draw on top
-
-                    # Add message type label near the arrow
-                    mid_x = (start_x + end_x) / 2 + perp_x * 2
-                    mid_y = (start_y + end_y) / 2 + perp_y * 2
-                    ax_graph.text(
-                        mid_x,
-                        mid_y,
-                        style["label"],
-                        fontsize=8,
-                        ha="center",
-                        va="center",
-                        bbox=dict(
-                            boxstyle="round,pad=0.1",
-                            facecolor=style["color"],
-                            alpha=0.7,
-                        ),
-                        color="white",
-                        fontweight="bold",
-                        zorder=11,
-                    )
-
-    # Message summary panel
-    ax_msgs.set_title("Message Summary (Last Step)")
-    ax_msgs.set_xlim(0, 10)
-    ax_msgs.set_ylim(0, 10)
-    ax_msgs.axis("off")
-
-    # Show message counts and recent activity
-    if (
-        st.session_state.sim.message_history
-        and len(st.session_state.sim.message_history) > timeline_idx
-    ):
-        messages = st.session_state.sim.message_history[timeline_idx]
-
-        # Message type counts
-        msg_counts = {}
-        for _, _, msg in messages:
-            msg_counts[msg.name] = msg_counts.get(msg.name, 0) + 1
-
-        y_pos = 9
-        ax_msgs.text(
-            0.5,
-            y_pos,
-            f"📨 Total Messages: {len(messages)}",
-            fontsize=10,
-            fontweight="bold",
-        )
-        y_pos -= 1
-
-        # Show counts for each message type
-        msg_colors = {
-            "REQUEST": "#6baed6",
-            "CONFIRM": "#31a354",
-            "WAIT": "#fdae6b",
-            "INHIBIT_REQUEST": "#de2d26",
-            "INHIBIT_CONFIRM": "#756bb1",
-        }
-
-        for msg_type, count in msg_counts.items():
-            if y_pos > 2:  # Leave space for recent messages
-                color = msg_colors.get(msg_type, "#666666")
-                ax_msgs.text(
-                    0.5,
-                    y_pos,
-                    f"{msg_type}: {count}",
-                    fontsize=9,
-                    color=color,
-                    fontweight="bold",
-                )
-                y_pos -= 0.8
-
-        # Show recent individual messages (last 3)
-        if messages:
-            y_pos = 2
-            ax_msgs.text(0.5, y_pos, "Recent Messages:", fontsize=8, style="italic")
-            y_pos -= 0.7
-
-            for sender, receiver, msg in messages[-3:]:
-                if y_pos > 0:
-                    color = msg_colors.get(msg.name, "#666666")
-                    ax_msgs.text(
-                        0.5,
-                        y_pos,
-                        f"{sender}→{receiver}: {msg.name}",
-                        fontsize=7,
-                        color=color,
-                        alpha=0.8,
-                    )
-                    y_pos -= 0.6
-
     st.pyplot(fig, use_container_width=True)
 
-# Unit Details and Hover Information
-st.subheader("📊 Unit Details & Hover Information")
-
-st.info(
-    "💡 **Interactive Inspection**: Use the sidebar selector above to inspect any unit in detail (equivalent to 'hover' functionality in the graph)"
-)
-
-# Show selected unit details
-if selected_unit:
+st.subheader("📊 Inspect")
+with st.expander("Unit details", expanded=False):
+    unit_options = list(st.session_state.sim.graph.units.keys())
+    default_index = unit_options.index("u_root") if "u_root" in unit_options else 0
+    selected_unit = st.selectbox(
+        "Unit",
+        unit_options,
+        index=default_index,
+        key="unit_select",
+    )
     selected_unit_obj = st.session_state.sim.graph.units[selected_unit]
     unit_snap = current_snap["units"][selected_unit]
 
@@ -659,105 +411,63 @@ if selected_unit:
     with col_name:
         st.metric("Unit", selected_unit)
     with col_state:
-        state_color = {
-            "INACTIVE": "🟢",
+        state_icon = {
+            "INACTIVE": "⚪",
             "REQUESTED": "🔵",
             "WAITING": "🟡",
             "ACTIVE": "🟣",
             "TRUE": "🟢",
-            "CONFIRMED": "🟦",
+            "CONFIRMED": "🟢",
             "FAILED": "🔴",
             "SUPPRESSED": "⚫",
         }.get(unit_snap["state"], "⚪")
-        st.metric("State", f"{state_color} {unit_snap['state']}")
+        st.metric("State", f"{state_icon} {unit_snap['state']}")
     with col_activation:
         st.metric("Activation", f"{unit_snap['a']:.3f}")
 
-    # Detailed information
-    st.write(f"**📋 Details for {selected_unit}:**")
-
     detail_col1, detail_col2 = st.columns(2)
-
     with detail_col1:
         st.write("**Message Queues:**")
-        st.info(f"📥 Inbox: {unit_snap['inbox_size']} messages")
-        st.info(f"📤 Outbox: {unit_snap['outbox_size']} messages")
-
-        if selected_unit_obj.inbox:
-            st.write("**Recent Inbox Messages:**")
-            for i, (sender, msg) in enumerate(
-                selected_unit_obj.inbox[-3:]
-            ):  # Show last 3
-                st.caption(f"• {sender} → {msg.name}")
-
+        st.info(f"📥 Inbox: {unit_snap['inbox_size']}  |  📤 Outbox: {unit_snap['outbox_size']}")
     with detail_col2:
-        st.write("**🔗 Connections:**")
-
-        # Child relationships
+        st.write("**Connections:**")
         sub_children = st.session_state.sim.graph.sub_children(selected_unit)
         if sub_children:
-            st.write("**Children (SUB links):**")
-            for child in sub_children:
-                child_unit = st.session_state.sim.graph.units[child]
-                status = (
-                    "🟢" if child_unit.state in [State.TRUE, State.CONFIRMED] else "⚪"
-                )
-                st.caption(
-                    f"• {child}: {status} {child_unit.state.name} (a={child_unit.a:.2f})"
-                )
-
-        # Parent relationships
+            st.caption("Children (SUB): " + ", ".join(sub_children))
         sur_children = st.session_state.sim.graph.sur_children(selected_unit)
         if sur_children:
-            st.write("**Requests to (SUR links):**")
-            for child in sur_children:
-                child_unit = st.session_state.sim.graph.units[child]
-                status = "🔵" if child_unit.state == State.REQUESTED else "⚪"
-                st.caption(f"• {child}: {status} {child_unit.state.name}")
-
-        # Sequence relationships
+            st.caption("Requests to (SUR): " + ", ".join(sur_children))
         por_successors = st.session_state.sim.graph.por_successors(selected_unit)
         if por_successors:
-            st.write("**Sequenced after (POR links):**")
-            for succ in por_successors:
-                succ_unit = st.session_state.sim.graph.units[succ]
-                status = "🟡" if succ_unit.state == State.CONFIRMED else "⚪"
-                st.caption(f"• {succ}: {status} {succ_unit.state.name}")
+            st.caption("Sequenced after (POR): " + ", ".join(por_successors))
 
-# Summary table for all units
-st.write("**📈 All Units Overview:**")
-unit_data = []
-for summary_unit_id, unit_data_dict in current_snap["units"].items():
-    summary_unit = st.session_state.sim.graph.units[summary_unit_id]
-    unit_data.append(
-        {
-            "Unit": summary_unit_id,
-            "Type": unit_data_dict["kind"],
-            "State": unit_data_dict["state"],
-            "Activation": round(unit_data_dict["a"], 3),
-            "Inbox": unit_data_dict["inbox_size"],
-            "Outbox": unit_data_dict["outbox_size"],
-        }
-    )
+with st.expander("All units (table)", expanded=False):
+    unit_data = []
+    for summary_unit_id, unit_data_dict in current_snap["units"].items():
+        unit_data.append(
+            {
+                "Unit": summary_unit_id,
+                "Type": unit_data_dict["kind"],
+                "State": unit_data_dict["state"],
+                "Activation": round(unit_data_dict["a"], 3),
+                "Inbox": unit_data_dict["inbox_size"],
+                "Outbox": unit_data_dict["outbox_size"],
+            }
+        )
+    st.dataframe(unit_data, use_container_width=True)
 
-st.dataframe(unit_data, use_container_width=True)
-
-# Status summary
+st.divider()
 col_status1, col_status2, col_status3 = st.columns(3)
 with col_status1:
     active_units = sum(
-        1
-        for u in current_snap["units"].values()
-        if u["state"] not in ["INACTIVE", "SUPPRESSED"]
+        1 for u in current_snap["units"].values() if u["state"] not in ["INACTIVE", "SUPPRESSED"]
     )
     st.metric("Active Units", active_units)
-
 with col_status2:
     confirmed_units = sum(
         1 for u in current_snap["units"].values() if u["state"] == "CONFIRMED"
     )
     st.metric("Confirmed Units", confirmed_units)
-
 with col_status3:
     total_messages = sum(
         u["inbox_size"] + u["outbox_size"] for u in current_snap["units"].values()
