@@ -18,6 +18,7 @@ Enhanced interface includes:
 import os
 import sys
 import time
+import json
 
 # Add project root to Python path BEFORE any imports
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -28,6 +29,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import streamlit as st
+import streamlit.components.v1 as components
 
 from perception.terminals import sample_scene_and_terminals
 from recon_core.engine import Engine
@@ -159,6 +161,214 @@ class ReCoNSimulation:
         self.fovea_path = [(32, 32)]
         return self.engine.snapshot()
 
+
+def build_cytoscape_elements_from_graph(sim):
+    """Build Cytoscape elements from current simulation graph/state."""
+    elements = []
+    # Nodes
+    for node_id, graph_unit in sim.graph.units.items():
+        state_name = graph_unit.state.name
+        activation = float(getattr(graph_unit, "a", 0.0))
+        # Size based on activation
+        size = max(16, min(64, int(16 + activation * 48)))
+        # Color by state
+        state_colors = {
+            "INACTIVE": "#9CA3AF",
+            "REQUESTED": "#60A5FA",
+            "WAITING": "#F59E0B",
+            "ACTIVE": "#A78BFA",
+            "TRUE": "#10B981",
+            "CONFIRMED": "#22C55E",
+            "FAILED": "#EF4444",
+            "SUPPRESSED": "#6B7280",
+        }
+        color = state_colors.get(state_name, "#60A5FA")
+        elements.append({
+            "data": {
+                "id": node_id,
+                "label": node_id,
+                "color": color,
+                "size": size,
+                "group": getattr(graph_unit, "kind", "unit"),
+                "state": state_name,
+                "activation": activation,
+            }
+        })
+    # Edges
+    for src_id, edges in sim.graph.out_edges.items():
+        for e in edges:
+            edge_type = e.type.name if hasattr(e, "type") else "EDGE"
+            weight = float(getattr(e, "w", 1.0))
+            elements.append({
+                "data": {
+                    "id": f"{e.src}->{e.dst}:{edge_type}",
+                    "source": e.src,
+                    "target": e.dst,
+                    "weight": weight,
+                    "edgeType": edge_type,
+                }
+            })
+    return elements
+
+
+def render_cytoscape_html(elements, height=780):
+    """Render an interactive Cytoscape graph inside Streamlit via HTML component."""
+    elements_json = json.dumps(elements)
+    html = f"""
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset=\"utf-8\" />
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+    <link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">
+    <link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>
+    <link href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap\" rel=\"stylesheet\"> 
+    <style>
+      :root {{
+        --bg: #0b1020; --panel: #0f172a; --surface: #111827; --text: #e5e7eb; --muted: #94a3b8; --brand: #22d3ee; --accent: #3b82f6; --border: #1f2937;
+      }}
+      html, body {{ height: 100%; margin: 0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: var(--text); }}
+      .wrap {{ display: grid; grid-template-rows: auto 1fr auto; height: 100%; background: linear-gradient(180deg, #0a0f1e 0%, #0b1020 100%); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }}
+      .header {{ display: grid; grid-template-columns: 1fr 320px; gap: 8px; padding: 10px; background: rgba(15, 23, 42, 0.9); border-bottom: 1px solid var(--border); }}
+      .toolbar {{ display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }}
+      .toolbar button {{ background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 6px 10px; cursor: pointer; }}
+      .toolbar button:hover {{ border-color: var(--accent); }}
+      .search input {{ width: 100%; background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 8px 10px; border-radius: 8px; }}
+      .body {{ display: grid; grid-template-columns: 260px 1fr 300px; height: 100%; }}
+      .panel {{ background: linear-gradient(180deg, rgba(17, 24, 39, 0.85), rgba(17, 24, 39, 0.75)); border-right: 1px solid var(--border); padding: 10px; }}
+      .panel.right {{ border-left: 1px solid var(--border); border-right: none; }}
+      .section-title {{ font-size: 12px; color: var(--muted); margin: 8px 4px; text-transform: uppercase; letter-spacing: 0.7px; }}
+      .grid2 {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }}
+      .canvas {{ position: relative; }}
+      #cy {{ width: 100%; height: 100%; }}
+      .inspector {{ display: grid; gap: 8px; }}
+      .field {{ display: grid; gap: 4px; }}
+      .field label {{ color: var(--muted); font-size: 12px; }}
+      .field input, .field select {{ background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 8px 10px; }}
+      .footer {{ padding: 6px 10px; color: var(--muted); border-top: 1px solid var(--border); background: rgba(15, 23, 42, 0.9); font-size: 12px; }}
+    </style>
+    <script src=\"https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js\"></script>
+    <script src=\"https://unpkg.com/cytoscape-cose-bilkent@4.1.0/cytoscape-cose-bilkent.js\"></script>
+  </head>
+  <body>
+    <div class=\"wrap\" style=\"height: {height}px\">
+      <div class=\"header\">
+        <div class=\"toolbar\">
+          <button data-layout=\"cose-bilkent\">CoSE Bilkent</button>
+          <button data-layout=\"grid\">Grid</button>
+          <button data-layout=\"circle\">Circle</button>
+          <button data-layout=\"breadthfirst\">Breadthfirst</button>
+          <button data-layout=\"concentric\">Concentric</button>
+          <button id=\"fitBtn\">Fit</button>
+          <button id=\"addNodeBtn\">Add Node</button>
+          <button id=\"addEdgeBtn\">Connect</button>
+          <button id=\"deleteBtn\">Delete</button>
+        </div>
+        <div class=\"search\"><input id=\"searchInput\" type=\"search\" placeholder=\"Search nodes... (Ctrl+K)\" /></div>
+      </div>
+      <div class=\"body\">
+        <aside class=\"panel left\">
+          <div class=\"section-title\">Import / Export</div>
+          <div class=\"grid2\">
+            <input type=\"file\" id=\"importFile\" accept=\"application/json\" />
+            <button id=\"exportBtn\">Export</button>
+          </div>
+        </aside>
+        <section class=\"canvas\"><div id=\"cy\"></div></section>
+        <aside class=\"panel right\">
+          <div class=\"section-title\">Inspector</div>
+          <form id=\"inspector\" class=\"inspector\">
+            <div class=\"field\"><label>ID</label><input name=\"id\" type=\"text\" readonly /></div>
+            <div class=\"field\"><label>Label</label><input name=\"label\" type=\"text\" /></div>
+            <div class=\"field\"><label>Color</label><input name=\"color\" type=\"color\" value=\"#3b82f6\" /></div>
+            <div class=\"field\"><label>Size</label><input name=\"size\" type=\"number\" min=\"10\" max=\"80\" value=\"28\" /></div>
+            <div class=\"field\"><label>Group</label><input name=\"group\" type=\"text\" placeholder=\"e.g. service\" /></div>
+            <div class=\"field\"><label>Edge Weight</label><input name=\"edgeWeight\" type=\"number\" step=\"0.1\" /></div>
+            <div><button type=\"button\" id=\"applyBtn\">Apply</button></div>
+          </form>
+        </aside>
+      </div>
+      <div class=\"footer\">Tips: Click to select. Shift+Click multi-select. Drag to pan; wheel to zoom.</div>
+    </div>
+
+    <script>
+      const INITIAL_ELEMENTS = {elements_json};
+      if (window.coseBilkent) {{ cytoscape.use(coseBilkent); }}
+      const cy = cytoscape({{
+        container: document.getElementById('cy'),
+        elements: INITIAL_ELEMENTS,
+        wheelSensitivity: 0.15,
+        minZoom: 0.1,
+        maxZoom: 3,
+        style: [
+          {{ selector: 'node', style: {{ 'background-color': 'data(color)', 'label': 'data(label)', 'color': '#e5e7eb', 'font-size': 12, 'text-valign': 'center', 'text-halign': 'center', 'text-outline-color': '#0b1020', 'text-outline-width': 2, 'width': 'mapData(size, 10, 80, 16px, 64px)', 'height': 'mapData(size, 10, 80, 16px, 64px)', 'overlay-opacity': 0 }} }},
+          {{ selector: 'node:selected', style: {{ 'overlay-color': '#22d3ee', 'overlay-opacity': 0.2, 'border-color': '#22d3ee', 'border-width': 2 }} }},
+          {{ selector: 'edge', style: {{ 'width': 'mapData(weight, 0.1, 3, 1px, 5px)', 'line-color': '#293249', 'target-arrow-color': '#293249', 'curve-style': 'bezier', 'target-arrow-shape': 'triangle' }} }},
+          {{ selector: 'edge[edgeType = "SUB"]', style: {{ 'line-color': '#22C55E', 'target-arrow-color': '#22C55E' }} }},
+          {{ selector: 'edge[edgeType = "SUR"]', style: {{ 'line-color': '#EF4444', 'target-arrow-color': '#EF4444' }} }},
+          {{ selector: 'edge[edgeType = "POR"]', style: {{ 'line-color': '#756bb1', 'target-arrow-color': '#756bb1', 'line-style': 'dashed' }} }},
+          {{ selector: 'edge[edgeType = "RET"]', style: {{ 'line-color': '#f59e0b', 'target-arrow-color': '#f59e0b', 'line-style': 'dotted' }} }},
+          {{ selector: '.faded', style: {{ 'opacity': 0.08, 'text-opacity': 0.2 }} }},
+        ],
+        layout: {{ name: 'cose-bilkent', animate: true, fit: true, randomize: false }}
+      }});
+
+      // Layout buttons
+      document.querySelectorAll('button[data-layout]').forEach(btn => {{
+        btn.addEventListener('click', () => {{
+          const name = btn.getAttribute('data-layout');
+          cy.layout({{ name, animate: true, fit: true }}).run();
+        }});
+      }});
+
+      document.getElementById('fitBtn').addEventListener('click', () => cy.fit());
+      document.getElementById('addNodeBtn').addEventListener('click', () => addNodeAt());
+      document.getElementById('deleteBtn').addEventListener('click', () => cy.$(':selected').remove());
+
+      // Edge creation
+      let connectMode = false; let firstNode = null;
+      const addEdgeBtn = document.getElementById('addEdgeBtn');
+      addEdgeBtn.addEventListener('click', () => {{ connectMode = !connectMode; addEdgeBtn.classList.toggle('active', connectMode); if (!connectMode) firstNode = null; }});
+      cy.on('tap', 'node', (evt) => {{
+        if (!connectMode) return; const node = evt.target;
+        if (!firstNode) {{ firstNode = node; node.select(); }} else if (firstNode.id() !== node.id()) {{
+          const id = uniqueId('e'); cy.add({{ group: 'edges', data: {{ id, source: firstNode.id(), target: node.id(), weight: 1.0 }} }});
+          firstNode.unselect(); firstNode = null; connectMode = false; addEdgeBtn.classList.remove('active');
+        }}
+      }});
+
+      // Search
+      const searchInput = document.getElementById('searchInput');
+      searchInput.addEventListener('input', () => {{
+        const q = searchInput.value.trim().toLowerCase(); cy.elements().removeClass('faded'); if (!q) return;
+        const matched = cy.nodes().filter(n => (n.data('label') || '').toLowerCase().includes(q));
+        cy.elements().addClass('faded'); matched.neighborhood().add(matched).removeClass('faded');
+      }});
+
+      // Inspector sync
+      const form = document.getElementById('inspector');
+      const applyBtn = document.getElementById('applyBtn');
+      function populate(ele) {{
+        if (!ele) {{ form.id.value=''; form.label.value=''; form.color.value='#3b82f6'; form.size.value=28; form.group.value=''; form.edgeWeight.value=''; return; }}
+        if (ele.isNode()) {{ form.id.value = ele.id(); form.label.value = ele.data('label')||''; form.color.value = ele.data('color')||'#3b82f6'; form.size.value = ele.data('size')||28; form.group.value = ele.data('group')||''; form.edgeWeight.value=''; }}
+        else {{ form.id.value = ele.id(); form.label.value=''; form.edgeWeight.value = ele.data('weight') ?? ''; }}
+      }}
+      cy.on('select unselect', () => {{ const sel = cy.elements(':selected'); if (sel.length === 1) populate(sel[0]); else populate(null); }});
+      applyBtn.addEventListener('click', () => {{ const sel = cy.elements(':selected'); if (sel.length !== 1) return; const ele = sel[0]; if (ele.isNode()) {{ ele.data({{ label: form.label.value, color: form.color.value, size: Number(form.size.value)||28, group: form.group.value||undefined }}); }} else {{ const w = parseFloat(form.edgeWeight.value); if (!Number.isNaN(w)) ele.data('weight', w); }} }});
+
+      // Import/Export
+      document.getElementById('exportBtn').addEventListener('click', () => {{ const json = JSON.stringify(cy.json().elements, null, 2); const blob = new Blob([json], {{ type: 'application/json' }}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'graph.json'; a.click(); URL.revokeObjectURL(url); }});
+      document.getElementById('importFile').addEventListener('change', async (e) => {{ const file = e.target.files?.[0]; if (!file) return; const text = await file.text(); try {{ const els = JSON.parse(text); cy.elements().remove(); cy.add(els); cy.layout({{ name: 'cose-bilkent', animate: true, fit: true }}).run(); }} catch {{ alert('Invalid JSON'); }} e.target.value = ''; }});
+
+      // Helpers
+      function uniqueId(prefix) {{ const r = Math.random().toString(36).slice(2, 8); const id = `${{prefix}}_${{r}}`; if (cy.getElementById(id).nonempty()) return uniqueId(prefix); return id; }}
+      function addNodeAt() {{ const id = uniqueId('n'); const node = cy.add({{ group: 'nodes', data: {{ id, label: id, color: '#22d3ee', size: 28 }} }}); cy.animate({{ center: {{ eles: node }}, duration: 250 }}); node.select(); }}
+      document.addEventListener('keydown', (e) => {{ if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='k') {{ e.preventDefault(); searchInput.focus(); searchInput.select(); }} if (e.key==='Delete'||e.key==='Backspace') {{ e.preventDefault(); cy.$(':selected').remove(); }} }});
+    </script>
+  </body>
+  </html>
+    """
+    components.html(html, height=height, scrolling=True)
 
 def get_speed_label_from_delay(delay):
     """Convert run delay value to human-readable speed label."""
@@ -363,321 +573,328 @@ with col_scene:
 with col_graph:
     st.subheader("🕸️ Network Graph & Messages")
 
-    # Create enhanced graph visualization
-    fig, (ax_graph, ax_msgs) = plt.subplots(2, 1, figsize=(8, 10), height_ratios=[2, 1])
+    graph_tabs = st.tabs(["Interactive Graph", "Static Graph"])
 
-    # Build NetworkX graph for visualization
-    G = nx.DiGraph()
-    state_colors = {
-        "INACTIVE": "#cccccc",
-        "REQUESTED": "#6baed6",
-        "WAITING": "#fdae6b",
-        "ACTIVE": "#9ecae1",
-        "TRUE": "#31a354",
-        "CONFIRMED": "#2ca25f",
-        "FAILED": "#de2d26",
-        "SUPPRESSED": "#756bb1",
-    }
-    state_sizes = {
-        "INACTIVE": 300,
-        "REQUESTED": 500,
-        "WAITING": 400,
-        "ACTIVE": 600,
-        "TRUE": 700,
-        "CONFIRMED": 800,
-        "FAILED": 400,
-        "SUPPRESSED": 350,
-    }
+    with graph_tabs[0]:
+        elements = build_cytoscape_elements_from_graph(st.session_state.sim)
+        render_cytoscape_html(elements, height=780)
 
-    # Node layout positions (fixed for consistency)
-    pos = {
-        "u_root": (0, 0),
-        "u_roof": (-1, 1),
-        "u_body": (0, 1),
-        "u_door": (1, 1),
-        "t_mean": (0, 2),
-        "t_vert": (-1, 2),
-        "t_horz": (1, 2),
-    }
+    with graph_tabs[1]:
+        # Create enhanced graph visualization
+        fig, (ax_graph, ax_msgs) = plt.subplots(2, 1, figsize=(8, 10), height_ratios=[2, 1])
 
-    # Add nodes with enhanced styling
-    for node_id, graph_unit in st.session_state.sim.graph.units.items():
-        state_name = graph_unit.state.name
-        G.add_node(
-            node_id,
-            color=state_colors[state_name],
-            size=state_sizes[state_name],
-            activation=round(graph_unit.a, 2),
-            state=state_name,
-        )
-
-    # Add edges with styling
-    edge_styles = {
-        "SUB": {"color": "#2ca25f", "style": "solid", "alpha": 0.7},
-        "SUR": {"color": "#de2d26", "style": "solid", "alpha": 0.7},
-        "POR": {"color": "#756bb1", "style": "dashed", "alpha": 0.5},
-        "RET": {"color": "#fdae6b", "style": "dotted", "alpha": 0.5},
-    }
-
-    for src_id, edges in st.session_state.sim.graph.out_edges.items():
-        for e in edges:
-            style = edge_styles[e.type.name]
-            G.add_edge(
-                e.src,
-                e.dst,
-                color=style["color"],
-                style=style["style"],
-                alpha=style["alpha"],
-                weight=e.w,
-            )
-
-    # Draw the graph
-    node_colors = [G.nodes[n]["color"] for n in G.nodes()]
-    node_sizes = [G.nodes[n]["size"] for n in G.nodes()]
-
-    # Draw edges by type
-    for link_type, style in edge_styles.items():
-        edges_of_type = [
-            (u, v) for u, v, d in G.edges(data=True) if d.get("style") == style["style"]
-        ]
-        if edges_of_type:
-            nx.draw_networkx_edges(
-                G,
-                pos,
-                edgelist=edges_of_type,
-                edge_color=style["color"],
-                style=style["style"],
-                alpha=style["alpha"],
-                arrows=True,
-                arrowsize=15,
-                ax=ax_graph,
-            )
-
-    # Draw nodes and labels with selection highlighting
-    nx.draw_networkx_nodes(
-        G, pos, node_color=node_colors, node_size=node_sizes, ax=ax_graph
-    )
-
-    node_sizes = [G.nodes[n]["size"] for n in G.nodes()]
-    # Highlight selected node
-    if selected_unit in pos:
-        sel_x, sel_y = pos[selected_unit]
-        ax_graph.scatter(
-            sel_x,
-            sel_y,
-            s=node_sizes[list(G.nodes()).index(selected_unit)] * 1.5,
-            c="yellow",
-            alpha=0.8,
-            edgecolors="black",
-            linewidth=3,
-        )
-
-    nx.draw_networkx_labels(G, pos, font_size=11, font_weight="bold", ax=ax_graph)
-
-    # Add edge labels
-    edge_labels = {}
-    for u, v in G.edges():
-        w = G.edges[(u, v)].get("weight")
-        edge_labels[(u, v)] = f"{w:.1f}" if isinstance(w, (int, float)) else ""
-    nx.draw_networkx_edge_labels(G, pos, edge_labels, font_size=8, ax=ax_graph)
-
-    ax_graph.set_title(
-        f"Network State (t={current_snap['t']}) - Yellow outline shows selected unit"
-    )
-    ax_graph.axis("off")
-
-    # Animated message arrows on the graph
-    # Draw message arrows between units for the current time step
-    if (
-        st.session_state.sim.message_history
-        and len(st.session_state.sim.message_history) > timeline_idx
-    ):
-        messages = st.session_state.sim.message_history[timeline_idx]
-
-        # Define arrow styles for different message types
-        arrow_styles = {
-            "REQUEST": {
-                "color": "#6baed6",
-                "width": 1,
-                "style": "-",
-                "alpha": 0.8,
-                "label": "→",
-            },
-            "CONFIRM": {
-                "color": "#31a354",
-                "width": 3,
-                "style": "-",
-                "alpha": 0.9,
-                "label": "⇒",
-            },
-            "WAIT": {
-                "color": "#fdae6b",
-                "width": 2,
-                "style": "--",
-                "alpha": 0.7,
-                "label": "⇄",
-            },
-            "INHIBIT_REQUEST": {
-                "color": "#de2d26",
-                "width": 2,
-                "style": ":",
-                "alpha": 0.8,
-                "label": "↔",
-            },
-            "INHIBIT_CONFIRM": {
-                "color": "#756bb1",
-                "width": 2,
-                "style": "-.",
-                "alpha": 0.8,
-                "label": "⇔",
-            },
+        # Build NetworkX graph for visualization
+        G = nx.DiGraph()
+        state_colors = {
+            "INACTIVE": "#cccccc",
+            "REQUESTED": "#6baed6",
+            "WAITING": "#fdae6b",
+            "ACTIVE": "#9ecae1",
+            "TRUE": "#31a354",
+            "CONFIRMED": "#2ca25f",
+            "FAILED": "#de2d26",
+            "SUPPRESSED": "#756bb1",
+        }
+        state_sizes = {
+            "INACTIVE": 300,
+            "REQUESTED": 500,
+            "WAITING": 400,
+            "ACTIVE": 600,
+            "TRUE": 700,
+            "CONFIRMED": 800,
+            "FAILED": 400,
+            "SUPPRESSED": 350,
         }
 
-        # Draw arrows for each message
-        for sender, receiver, msg in messages[
-            -8:
-        ]:  # Show last 8 messages to avoid clutter
-            if sender in pos and receiver in pos:
-                style = arrow_styles.get(
-                    msg.name,
-                    {
-                        "color": "#666666",
-                        "width": 1,
-                        "style": "-",
-                        "alpha": 0.5,
-                        "label": "?",
-                    },
+        # Node layout positions (fixed for consistency)
+        pos = {
+            "u_root": (0, 0),
+            "u_roof": (-1, 1),
+            "u_body": (0, 1),
+            "u_door": (1, 1),
+            "t_mean": (0, 2),
+            "t_vert": (-1, 2),
+            "t_horz": (1, 2),
+        }
+
+        # Add nodes with enhanced styling
+        for node_id, graph_unit in st.session_state.sim.graph.units.items():
+            state_name = graph_unit.state.name
+            G.add_node(
+                node_id,
+                color=state_colors[state_name],
+                size=state_sizes[state_name],
+                activation=round(graph_unit.a, 2),
+                state=state_name,
+            )
+
+        # Add edges with styling
+        edge_styles = {
+            "SUB": {"color": "#2ca25f", "style": "solid", "alpha": 0.7},
+            "SUR": {"color": "#de2d26", "style": "solid", "alpha": 0.7},
+            "POR": {"color": "#756bb1", "style": "dashed", "alpha": 0.5},
+            "RET": {"color": "#fdae6b", "style": "dotted", "alpha": 0.5},
+        }
+
+        for src_id, edges in st.session_state.sim.graph.out_edges.items():
+            for e in edges:
+                style = edge_styles[e.type.name]
+                G.add_edge(
+                    e.src,
+                    e.dst,
+                    color=style["color"],
+                    style=style["style"],
+                    alpha=style["alpha"],
+                    weight=e.w,
                 )
 
-                # Calculate arrow positions with slight offset to avoid overlapping nodes
-                sender_pos = pos[sender]
-                receiver_pos = pos[receiver]
+        # Draw the graph
+        node_colors = [G.nodes[n]["color"] for n in G.nodes()]
+        node_sizes = [G.nodes[n]["size"] for n in G.nodes()]
 
-                # Add small offset for multiple messages between same units
-                offset = (
-                    messages.index((sender, receiver, msg)) * 0.05
-                )  # Small offset for each message
-                dx = receiver_pos[0] - sender_pos[0]
-                dy = receiver_pos[1] - sender_pos[1]
-                length = (dx**2 + dy**2) ** 0.5
+        # Draw edges by type
+        for link_type, style in edge_styles.items():
+            edges_of_type = [
+                (u, v) for u, v, d in G.edges(data=True) if d.get("style") == style["style"]
+            ]
+            if edges_of_type:
+                nx.draw_networkx_edges(
+                    G,
+                    pos,
+                    edgelist=edges_of_type,
+                    edge_color=style["color"],
+                    style=style["style"],
+                    alpha=style["alpha"],
+                    arrows=True,
+                    arrowsize=15,
+                    ax=ax_graph,
+                )
 
-                if length > 0:
-                    # Perpendicular offset for parallel arrows
-                    perp_x = -dy / length * offset
-                    perp_y = dx / length * offset
+        # Draw nodes and labels with selection highlighting
+        nx.draw_networkx_nodes(
+            G, pos, node_color=node_colors, node_size=node_sizes, ax=ax_graph
+        )
 
-                    start_x = sender_pos[0] + perp_x
-                    start_y = sender_pos[1] + perp_y
-                    end_x = receiver_pos[0] + perp_x
-                    end_y = receiver_pos[1] + perp_y
+        node_sizes = [G.nodes[n]["size"] for n in G.nodes()]
+        # Highlight selected node
+        if selected_unit in pos:
+            sel_x, sel_y = pos[selected_unit]
+            ax_graph.scatter(
+                sel_x,
+                sel_y,
+                s=node_sizes[list(G.nodes()).index(selected_unit)] * 1.5,
+                c="yellow",
+                alpha=0.8,
+                edgecolors="black",
+                linewidth=3,
+            )
 
-                    # Draw the message arrow
-                    ax_graph.annotate(
-                        "",
-                        xy=(end_x, end_y),
-                        xytext=(start_x, start_y),
-                        arrowprops=dict(
-                            arrowstyle="->",
-                            color=style["color"],
-                            linewidth=style["width"],
-                            linestyle=style["style"],
-                            alpha=style["alpha"],
-                            shrinkA=25,  # Shrink from start point
-                            shrinkB=25,  # Shrink from end point
-                        ),
-                        zorder=10,
-                    )  # Draw on top
+        nx.draw_networkx_labels(G, pos, font_size=11, font_weight="bold", ax=ax_graph)
 
-                    # Add message type label near the arrow
-                    mid_x = (start_x + end_x) / 2 + perp_x * 2
-                    mid_y = (start_y + end_y) / 2 + perp_y * 2
-                    ax_graph.text(
-                        mid_x,
-                        mid_y,
-                        style["label"],
-                        fontsize=8,
-                        ha="center",
-                        va="center",
-                        bbox=dict(
-                            boxstyle="round,pad=0.1",
-                            facecolor=style["color"],
-                            alpha=0.7,
-                        ),
-                        color="white",
-                        fontweight="bold",
-                        zorder=11,
+        # Add edge labels
+        edge_labels = {}
+        for u, v in G.edges():
+            w = G.edges[(u, v)].get("weight")
+            edge_labels[(u, v)] = f"{w:.1f}" if isinstance(w, (int, float)) else ""
+        nx.draw_networkx_edge_labels(G, pos, edge_labels, font_size=8, ax=ax_graph)
+
+        ax_graph.set_title(
+            f"Network State (t={current_snap['t']}) - Yellow outline shows selected unit"
+        )
+        ax_graph.axis("off")
+
+        # Animated message arrows on the graph
+        # Draw message arrows between units for the current time step
+        if (
+            st.session_state.sim.message_history
+            and len(st.session_state.sim.message_history) > timeline_idx
+        ):
+            messages = st.session_state.sim.message_history[timeline_idx]
+
+            # Define arrow styles for different message types
+            arrow_styles = {
+                "REQUEST": {
+                    "color": "#6baed6",
+                    "width": 1,
+                    "style": "-",
+                    "alpha": 0.8,
+                    "label": "→",
+                },
+                "CONFIRM": {
+                    "color": "#31a354",
+                    "width": 3,
+                    "style": "-",
+                    "alpha": 0.9,
+                    "label": "⇒",
+                },
+                "WAIT": {
+                    "color": "#fdae6b",
+                    "width": 2,
+                    "style": "--",
+                    "alpha": 0.7,
+                    "label": "⇄",
+                },
+                "INHIBIT_REQUEST": {
+                    "color": "#de2d26",
+                    "width": 2,
+                    "style": ":",
+                    "alpha": 0.8,
+                    "label": "↔",
+                },
+                "INHIBIT_CONFIRM": {
+                    "color": "#756bb1",
+                    "width": 2,
+                    "style": "-.",
+                    "alpha": 0.8,
+                    "label": "⇔",
+                },
+            }
+
+            # Draw arrows for each message
+            for sender, receiver, msg in messages[
+                -8:
+            ]:  # Show last 8 messages to avoid clutter
+                if sender in pos and receiver in pos:
+                    style = arrow_styles.get(
+                        msg.name,
+                        {
+                            "color": "#666666",
+                            "width": 1,
+                            "style": "-",
+                            "alpha": 0.5,
+                            "label": "?",
+                        },
                     )
 
-    # Message summary panel
-    ax_msgs.set_title("Message Summary (Last Step)")
-    ax_msgs.set_xlim(0, 10)
-    ax_msgs.set_ylim(0, 10)
-    ax_msgs.axis("off")
+                    # Calculate arrow positions with slight offset to avoid overlapping nodes
+                    sender_pos = pos[sender]
+                    receiver_pos = pos[receiver]
 
-    # Show message counts and recent activity
-    if (
-        st.session_state.sim.message_history
-        and len(st.session_state.sim.message_history) > timeline_idx
-    ):
-        messages = st.session_state.sim.message_history[timeline_idx]
+                    # Add small offset for multiple messages between same units
+                    offset = (
+                        messages.index((sender, receiver, msg)) * 0.05
+                    )  # Small offset for each message
+                    dx = receiver_pos[0] - sender_pos[0]
+                    dy = receiver_pos[1] - sender_pos[1]
+                    length = (dx**2 + dy**2) ** 0.5
 
-        # Message type counts
-        msg_counts = {}
-        for _, _, msg in messages:
-            msg_counts[msg.name] = msg_counts.get(msg.name, 0) + 1
+                    if length > 0:
+                        # Perpendicular offset for parallel arrows
+                        perp_x = -dy / length * offset
+                        perp_y = dx / length * offset
 
-        y_pos = 9
-        ax_msgs.text(
-            0.5,
-            y_pos,
-            f"📨 Total Messages: {len(messages)}",
-            fontsize=10,
-            fontweight="bold",
-        )
-        y_pos -= 1
+                        start_x = sender_pos[0] + perp_x
+                        start_y = sender_pos[1] + perp_y
+                        end_x = receiver_pos[0] + perp_x
+                        end_y = receiver_pos[1] + perp_y
 
-        # Show counts for each message type
-        msg_colors = {
-            "REQUEST": "#6baed6",
-            "CONFIRM": "#31a354",
-            "WAIT": "#fdae6b",
-            "INHIBIT_REQUEST": "#de2d26",
-            "INHIBIT_CONFIRM": "#756bb1",
-        }
+                        # Draw the message arrow
+                        ax_graph.annotate(
+                            "",
+                            xy=(end_x, end_y),
+                            xytext=(start_x, start_y),
+                            arrowprops=dict(
+                                arrowstyle="->",
+                                color=style["color"],
+                                linewidth=style["width"],
+                                linestyle=style["style"],
+                                alpha=style["alpha"],
+                                shrinkA=25,  # Shrink from start point
+                                shrinkB=25,  # Shrink from end point
+                            ),
+                            zorder=10,
+                        )  # Draw on top
 
-        for msg_type, count in msg_counts.items():
-            if y_pos > 2:  # Leave space for recent messages
-                color = msg_colors.get(msg_type, "#666666")
-                ax_msgs.text(
-                    0.5,
-                    y_pos,
-                    f"{msg_type}: {count}",
-                    fontsize=9,
-                    color=color,
-                    fontweight="bold",
-                )
-                y_pos -= 0.8
+                        # Add message type label near the arrow
+                        mid_x = (start_x + end_x) / 2 + perp_x * 2
+                        mid_y = (start_y + end_y) / 2 + perp_y * 2
+                        ax_graph.text(
+                            mid_x,
+                            mid_y,
+                            style["label"],
+                            fontsize=8,
+                            ha="center",
+                            va="center",
+                            bbox=dict(
+                                boxstyle="round,pad=0.1",
+                                facecolor=style["color"],
+                                alpha=0.7,
+                            ),
+                            color="white",
+                            fontweight="bold",
+                            zorder=11,
+                        )
 
-        # Show recent individual messages (last 3)
-        if messages:
-            y_pos = 2
-            ax_msgs.text(0.5, y_pos, "Recent Messages:", fontsize=8, style="italic")
-            y_pos -= 0.7
+        # Message summary panel
+        ax_msgs.set_title("Message Summary (Last Step)")
+        ax_msgs.set_xlim(0, 10)
+        ax_msgs.set_ylim(0, 10)
+        ax_msgs.axis("off")
 
-            for sender, receiver, msg in messages[-3:]:
-                if y_pos > 0:
-                    color = msg_colors.get(msg.name, "#666666")
+        # Show message counts and recent activity
+        if (
+            st.session_state.sim.message_history
+            and len(st.session_state.sim.message_history) > timeline_idx
+        ):
+            messages = st.session_state.sim.message_history[timeline_idx]
+
+            # Message type counts
+            msg_counts = {}
+            for _, _, msg in messages:
+                msg_counts[msg.name] = msg_counts.get(msg.name, 0) + 1
+
+            y_pos = 9
+            ax_msgs.text(
+                0.5,
+                y_pos,
+                f"📨 Total Messages: {len(messages)}",
+                fontsize=10,
+                fontweight="bold",
+            )
+            y_pos -= 1
+
+            # Show counts for each message type
+            msg_colors = {
+                "REQUEST": "#6baed6",
+                "CONFIRM": "#31a354",
+                "WAIT": "#fdae6b",
+                "INHIBIT_REQUEST": "#de2d26",
+                "INHIBIT_CONFIRM": "#756bb1",
+            }
+
+            for msg_type, count in msg_counts.items():
+                if y_pos > 2:  # Leave space for recent messages
+                    color = msg_colors.get(msg_type, "#666666")
                     ax_msgs.text(
                         0.5,
                         y_pos,
-                        f"{sender}→{receiver}: {msg.name}",
-                        fontsize=7,
+                        f"{msg_type}: {count}",
+                        fontsize=9,
                         color=color,
-                        alpha=0.8,
+                        fontweight="bold",
                     )
-                    y_pos -= 0.6
+                    y_pos -= 0.8
 
-    st.pyplot(fig, use_container_width=True)
+            # Show recent individual messages (last 3)
+            if messages:
+                y_pos = 2
+                ax_msgs.text(0.5, y_pos, "Recent Messages:", fontsize=8, style="italic")
+                y_pos -= 0.7
+
+                for sender, receiver, msg in messages[-3:]:
+                    if y_pos > 0:
+                        color = msg_colors.get(msg.name, "#666666")
+                        ax_msgs.text(
+                            0.5,
+                            y_pos,
+                            f"{sender}→{receiver}: {msg.name}",
+                            fontsize=7,
+                            color=color,
+                            alpha=0.8,
+                        )
+                        y_pos -= 0.6
+
+        st.pyplot(fig, use_container_width=True)
 
 # Unit Details and Hover Information
 st.subheader("📊 Unit Details & Hover Information")
