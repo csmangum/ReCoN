@@ -142,6 +142,71 @@ def draw_disk_approx(img, cx, cy, r, val=1.0):
                 img[yy, xx] = val
     return img
 
+
+def draw_line_thick(img, x0, y0, x1, y1, thickness, val=1.0):
+    """
+    Draw a thick line segment between (x0, y0) and (x1, y1) using a distance-to-segment fill.
+
+    Args:
+        img: Image array to draw on (modified in-place)
+        x0, y0: Start point
+        x1, y1: End point
+        thickness: Line thickness in pixels
+        val: Intensity value to fill (default: 1.0)
+
+    Returns:
+        numpy.ndarray: The modified image array
+    """
+    t = max(1, int(thickness))
+    img_h, img_w = img.shape
+
+    # Bounding box expanded by thickness
+    min_x = int(max(0, min(x0, x1) - t))
+    max_x = int(min(img_w - 1, max(x0, x1) + t))
+    min_y = int(max(0, min(y0, y1) - t))
+    max_y = int(min(img_h - 1, max(y0, y1) + t))
+
+    vx = float(x1 - x0)
+    vy = float(y1 - y0)
+    seg_len2 = vx * vx + vy * vy
+    radius = t / 2.0
+    r2 = radius * radius
+
+    for yy in range(min_y, max_y + 1):
+        for xx in range(min_x, max_x + 1):
+            # Pixel center
+            px = xx + 0.5
+            py = yy + 0.5
+            wx = px - x0
+            wy = py - y0
+            if seg_len2 <= 1e-6:
+                # Degenerate: draw a disk at the point
+                dx = px - x0
+                dy = py - y0
+                if dx * dx + dy * dy <= r2:
+                    img[yy, xx] = val
+                continue
+            c1 = wx * vx + wy * vy
+            if c1 <= 0.0:
+                dx = px - x0
+                dy = py - y0
+                dist2 = dx * dx + dy * dy
+            else:
+                if c1 >= seg_len2:
+                    dx = px - x1
+                    dy = py - y1
+                    dist2 = dx * dx + dy * dy
+                else:
+                    b = c1 / seg_len2
+                    proj_x = x0 + b * vx
+                    proj_y = y0 + b * vy
+                    dx = px - proj_x
+                    dy = py - proj_y
+                    dist2 = dx * dx + dy * dy
+            if dist2 <= r2:
+                img[yy, xx] = val
+    return img
+
 def make_house_scene(size=64, noise=0.05, scale_factor=1.0, position_offset=(0, 0)):
     """
     Generate a synthetic house scene with body, roof, and door.
@@ -563,7 +628,7 @@ def make_castle_scene(size=64, noise=0.05, scale_factor=1.0, position_offset=(0,
     return img
 
 
-def make_windmill_scene(size=64, noise=0.05, scale_factor=1.0, position_offset=(0, 0)):
+def make_windmill_scene(size=64, noise=0.05, scale_factor=1.0, position_offset=(0, 0), blades=4, blade_angle_deg=None):
     """
     Generate a synthetic windmill scene with a tower, roof, hub, and blades.
 
@@ -596,47 +661,23 @@ def make_windmill_scene(size=64, noise=0.05, scale_factor=1.0, position_offset=(
     hub_r = max(2, tw // 4)
     draw_disk_approx(img, cx, cy, hub_r, 0.95)
 
-    # Blades lengths and thickness
+    # Blades with arbitrary angle using thick lines
     blade_len = max(10, int(size * 0.22 * scale_factor))
     blade_th = max(2, tw // 4)
-
-    # Horizontal blade
-    hx = max(0, cx - blade_len)
-    hw = min(size - hx, blade_len * 2)
-    draw_rect(img, hx, max(0, cy - blade_th // 2), hw, blade_th, 0.85)
-
-    # Vertical blade
-    vy = max(0, cy - blade_len)
-    vh = min(size - vy, blade_len * 2)
-    draw_rect(img, max(0, cx - blade_th // 2), vy, blade_th, vh, 0.85)
-
-    # Diagonal blades using trapezoids to approximate slant
-    diag_len = blade_len
-    diag_th = blade_th
-    # Down-right
-    draw_trapezoid(
-        img,
-        top_x=cx,
-        top_w=diag_th,
-        base_x=min(size - 1, cx + diag_len),
-        base_w=diag_th,
-        y=max(0, cy - diag_len // 8),
-        h=min(size - max(0, cy - diag_len // 8), diag_len),
-        val=0.85,
-    )
-    # Up-right
-    start_y = max(0, cy - diag_len)
-    height = min(size - start_y, diag_len)
-    draw_trapezoid(
-        img,
-        top_x=cx,
-        top_w=diag_th,
-        base_x=min(size - 1, cx + diag_len),
-        base_w=diag_th,
-        y=start_y,
-        h=height,
-        val=0.85,
-    )
+    # Determine starting angle
+    if blade_angle_deg is None:
+        blade_angle_deg = float(np.random.uniform(0.0, 360.0))
+    blades = max(2, min(8, int(blades)))
+    angle_step = 360.0 / float(blades)
+    for b in range(blades):
+        ang = np.deg2rad(blade_angle_deg + b * angle_step)
+        dx = int(round(np.cos(ang) * blade_len))
+        dy = int(round(np.sin(ang) * blade_len))
+        x1 = int(cx + dx)
+        y1 = int(cy + dy)
+        x0 = int(cx - dx * 0.15)
+        y0 = int(cy - dy * 0.15)
+        draw_line_thick(img, x0, y0, x1, y1, blade_th, 0.85)
 
     # Noise
     if noise > 0:
@@ -646,7 +687,7 @@ def make_windmill_scene(size=64, noise=0.05, scale_factor=1.0, position_offset=(
     return img
 
 
-def make_lighthouse_scene(size=64, noise=0.05, scale_factor=1.0, position_offset=(0, 0)):
+def make_lighthouse_scene(size=64, noise=0.05, scale_factor=1.0, position_offset=(0, 0), beam_angle_deg=0.0):
     """
     Generate a synthetic lighthouse with striped body, top cap, and light beam.
 
@@ -682,12 +723,15 @@ def make_lighthouse_scene(size=64, noise=0.05, scale_factor=1.0, position_offset
     cap_y = max(0, by - cap_h)
     draw_rect(img, bx, cap_y, bw, cap_h, 0.9)
 
-    # Light beam to the right using trapezoid
-    beam_h = max(4, cap_h + 2)
-    beam_top_x = bx + bw
-    beam_base_x = min(size - 1, beam_top_x + int(size * 0.35))
-    beam_y = max(0, cap_y + cap_h // 2 - beam_h // 2)
-    draw_trapezoid(img, beam_top_x, 2, beam_base_x, max(4, bw // 2), beam_y, beam_h, 1.0)
+    # Light beam: angled thick line emanating from lantern center
+    beam_center_x = bx + bw
+    beam_center_y = cap_y + cap_h // 2
+    beam_len = int(size * 0.45)
+    beam_th = max(3, bw // 2)
+    ang = np.deg2rad(beam_angle_deg)
+    x1 = int(round(beam_center_x + np.cos(ang) * beam_len))
+    y1 = int(round(beam_center_y + np.sin(ang) * beam_len))
+    draw_line_thick(img, beam_center_x, beam_center_y, x1, y1, beam_th, 1.0)
 
     # Small door at bottom
     dw = max(3, bw // 3)
