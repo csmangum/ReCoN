@@ -5,3 +5,4 @@ networkx==3.3
 streamlit==1.36.0
 matplotlib==3.8.2
 scipy==1.11.4
+streamlit-cytoscapejs==0.0.5

@@ -26,10 +26,14 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 import matplotlib.pyplot as plt
-import networkx as nx
 import numpy as np
 import streamlit as st
 import streamlit.components.v1 as components
+try:
+    from streamlit_cytoscapejs import st_cytoscapejs
+    HAS_ST_CYTO = True
+except Exception:
+    HAS_ST_CYTO = False
 
 from perception.terminals import sample_scene_and_terminals
 from recon_core.engine import Engine
@@ -170,7 +174,7 @@ def build_cytoscape_elements_from_graph(sim):
         state_name = graph_unit.state.name
         activation = float(getattr(graph_unit, "a", 0.0))
         # Size based on activation
-        size = max(16, min(64, int(16 + activation * 48)))
+        default_size = max(16, min(64, int(16 + activation * 48)))
         # Color by state
         state_colors = {
             "INACTIVE": "#9CA3AF",
@@ -182,11 +186,15 @@ def build_cytoscape_elements_from_graph(sim):
             "FAILED": "#EF4444",
             "SUPPRESSED": "#6B7280",
         }
-        color = state_colors.get(state_name, "#60A5FA")
+        # Allow meta overrides
+        meta = getattr(graph_unit, "meta", {}) or {}
+        color = meta.get("color") or state_colors.get(state_name, "#60A5FA")
+        size = int(meta.get("size") or default_size)
+        label = meta.get("label") or node_id
         elements.append({
             "data": {
                 "id": node_id,
-                "label": node_id,
+                "label": label,
                 "color": color,
                 "size": size,
                 "group": getattr(graph_unit, "kind", "unit"),
@@ -211,8 +219,15 @@ def build_cytoscape_elements_from_graph(sim):
     return elements
 
 
-def render_cytoscape_html(elements, height=780):
+def render_cytoscape_html(elements, height=780, enable_two_way=False):
     """Render an interactive Cytoscape graph inside Streamlit via HTML component."""
+    # If the optional component is available and two-way is requested, prefer it
+    if enable_two_way and HAS_ST_CYTO:
+        selected = st_cytoscapejs(elements=elements, stylesheet=[
+            {"selector": 'node', "style": {"background-color": 'data(color)', "label": 'data(label)'}},
+            {"selector": 'edge', "style": {"curve-style": 'bezier', "target-arrow-shape": 'triangle'}}
+        ], layout={"name": "cose-bilkent"}, height=f"{height}px")
+        return selected
     elements_json = json.dumps(elements)
     html = f"""
 <!DOCTYPE html>
@@ -369,6 +384,7 @@ def render_cytoscape_html(elements, height=780):
   </html>
     """
     components.html(html, height=height, scrolling=True)
+    return None
 
 def get_speed_label_from_delay(delay):
     """Convert run delay value to human-readable speed label."""
@@ -571,17 +587,9 @@ with col_scene:
             cols[i].metric(term_name, f"{term_value:.3f}")
 
 with col_graph:
-    st.subheader("🕸️ Network Graph & Messages")
-
-    graph_tabs = st.tabs(["Interactive Graph", "Static Graph"])
-
-    with graph_tabs[0]:
-        elements = build_cytoscape_elements_from_graph(st.session_state.sim)
-        render_cytoscape_html(elements, height=780)
-
-    with graph_tabs[1]:
-        # Create enhanced graph visualization
-        fig, (ax_graph, ax_msgs) = plt.subplots(2, 1, figsize=(8, 10), height_ratios=[2, 1])
+    st.subheader("🕸️ Network Graph")
+    elements = build_cytoscape_elements_from_graph(st.session_state.sim)
+    selected = render_cytoscape_html(elements, height=780, enable_two_way=True)
 
         # Build NetworkX graph for visualization
         G = nx.DiGraph()

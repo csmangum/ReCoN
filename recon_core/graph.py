@@ -149,6 +149,49 @@ class Graph:
         self.out_edges[e.src].append(e)
         self.in_edges[e.dst].append(e)
 
+    def remove_unit(self, unit_id: str) -> None:
+        """Remove a unit and all incident edges from the graph."""
+        if unit_id not in self.units:
+            return
+        # Remove outgoing edges
+        for e in list(self.out_edges.get(unit_id, [])):
+            if e in self.in_edges.get(e.dst, []):
+                self.in_edges[e.dst].remove(e)
+        self.out_edges.pop(unit_id, None)
+        # Remove incoming edges
+        for e in list(self.in_edges.get(unit_id, [])):
+            if e in self.out_edges.get(e.src, []):
+                self.out_edges[e.src].remove(e)
+        self.in_edges.pop(unit_id, None)
+        # Remove unit
+        self.units.pop(unit_id, None)
+
+    def remove_edge(self, src: str, dst: str, link_type: LinkType | None = None) -> None:
+        """Remove edge(s) between src and dst, optionally matching type."""
+        if src in self.out_edges:
+            new_out = []
+            for e in self.out_edges[src]:
+                if e.dst == dst and (link_type is None or e.type == link_type):
+                    # remove from in_edges as well
+                    if e in self.in_edges.get(dst, []):
+                        self.in_edges[dst].remove(e)
+                    continue
+                new_out.append(e)
+            self.out_edges[src] = new_out
+
+    def set_edge_weight(self, src: str, dst: str, link_type: LinkType, weight: float) -> bool:
+        """Set weight on the first edge matching src, dst, and type. Returns True if updated."""
+        for e in self.out_edges.get(src, []):
+            if e.dst == dst and e.type == link_type:
+                e.w = float(weight)
+                return True
+        return False
+
+    def set_unit_meta(self, unit_id: str, updates: dict) -> None:
+        """Update meta fields for a unit."""
+        if unit_id in self.units:
+            self.units[unit_id].meta.update(dict(updates or {}))
+
     def neighbors(self, u_id: str, direction: str = "out") -> List[Edge]:
         """
         Get all edges connected to a unit in the specified direction.
