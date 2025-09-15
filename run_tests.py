@@ -8,7 +8,17 @@ providing a fallback testing solution.
 
 import sys
 import traceback
+import os
 from typing import List, Callable
+
+# ReCoN core imports
+from recon_core.enums import UnitType, State, Message, LinkType
+from recon_core.graph import Graph, Unit, Edge
+from recon_core.engine import Engine
+from recon_core.config import EngineConfig
+from recon_core.learn import online_sur_update
+from recon_core import compile_from_file
+from recon_core.metrics import binary_precision_recall
 
 def run_test(test_func: Callable, test_name: str = None) -> bool:
     """Run a single test function and report results."""
@@ -42,9 +52,6 @@ def run_test_suite(test_functions: List[Callable], suite_name: str) -> tuple:
 
 def test_basic_functionality():
     """Test basic ReCoN functionality."""
-    from recon_core.enums import UnitType, State, Message, LinkType
-    from recon_core.graph import Graph, Unit, Edge
-    from recon_core.engine import Engine
     
     # Test Unit creation
     unit = Unit('test', UnitType.TERMINAL, a=0.5, thresh=0.6)
@@ -67,8 +74,6 @@ def test_basic_functionality():
 
 def test_graph_operations():
     """Test Graph class operations."""
-    from recon_core.enums import UnitType, LinkType
-    from recon_core.graph import Graph, Unit, Edge
     
     graph = Graph()
     unit1 = Unit('u1', UnitType.SCRIPT)
@@ -97,9 +102,6 @@ def test_graph_operations():
 
 def test_engine_operations():
     """Test Engine class operations."""
-    from recon_core.enums import UnitType, State, Message, LinkType
-    from recon_core.graph import Graph, Unit, Edge
-    from recon_core.engine import Engine
     
     graph = Graph()
     parent = Unit('parent', UnitType.SCRIPT, state=State.ACTIVE)
@@ -127,9 +129,6 @@ def test_engine_operations():
 
 def test_message_system():
     """Test message passing system."""
-    from recon_core.enums import UnitType, State, Message
-    from recon_core.graph import Graph, Unit
-    from recon_core.engine import Engine
     
     graph = Graph()
     unit = Unit('test', UnitType.TERMINAL, state=State.INACTIVE, a=0.1)
@@ -149,9 +148,6 @@ def test_message_system():
 
 def test_learning_system():
     """Test learning functionality."""
-    from recon_core.enums import UnitType, State, LinkType
-    from recon_core.graph import Graph, Unit, Edge
-    from recon_core.learn import online_sur_update
     
     graph = Graph()
     parent = Unit('parent', UnitType.SCRIPT, state=State.CONFIRMED)
@@ -176,9 +172,6 @@ def test_learning_system():
 
 def test_state_machine():
     """Test state machine transitions."""
-    from recon_core.enums import UnitType, State, Message
-    from recon_core.graph import Graph, Unit
-    from recon_core.engine import Engine
     
     graph = Graph()
     terminal = Unit('terminal', UnitType.TERMINAL, a=0.8, thresh=0.5)
@@ -198,9 +191,6 @@ def test_state_machine():
 
 def test_integration_scenario():
     """Test a complete integration scenario."""
-    from recon_core.enums import UnitType, State, LinkType
-    from recon_core.graph import Graph, Unit, Edge
-    from recon_core.engine import Engine
     
     # Create simple house recognition network
     graph = Graph()
@@ -229,10 +219,6 @@ def test_integration_scenario():
 
 def test_ret_feedback_demotes_predecessor_when_enabled():
     """RET feedback demotes confirmed predecessor when successor fails and policy enabled."""
-    from recon_core.enums import UnitType, State, LinkType
-    from recon_core.graph import Graph, Unit, Edge
-    from recon_core.engine import Engine
-    from recon_core.config import EngineConfig
 
     g = Graph()
     pred = Unit('pred', UnitType.SCRIPT, state=State.CONFIRMED, a=0.9)
@@ -252,9 +238,6 @@ def test_ret_feedback_demotes_predecessor_when_enabled():
 
 def test_script_compiler():
     """Test YAML->Graph compiler builds expected topology and POR sequence."""
-    import os
-    from recon_core import compile_from_file
-    from recon_core.enums import LinkType, UnitType
 
     yaml_path = os.path.join(os.path.dirname(__file__), 'scripts', 'house.yaml')
     # When run from repo root, adjust path accordingly
@@ -299,9 +282,6 @@ def test_script_compiler():
 
 def test_barn_compiler():
     """Compile barn.yaml and check basic structure and POR mapping."""
-    import os
-    from recon_core import compile_from_file
-    from recon_core.enums import LinkType, UnitType
 
     yaml_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'scripts', 'barn.yaml'))
     g = compile_from_file(yaml_path)
@@ -356,10 +336,6 @@ def main():
 
 if __name__ == "__main__":
     # Inject Day 6 metrics tests into the runner without pytest
-    from recon_core.metrics import binary_precision_recall
-    from recon_core.enums import UnitType, State, LinkType
-    from recon_core.graph import Graph, Unit, Edge
-    from recon_core.engine import Engine
 
     def test_metrics_binary():
         m = binary_precision_recall([1, 0, 1, 0, 1], [1, 1, 0, 0, 1])
