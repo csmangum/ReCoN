@@ -34,6 +34,13 @@ from recon_core.engine import Engine
 from recon_core.enums import LinkType, State, UnitType
 from recon_core.graph import Edge, Graph, Unit
 
+# Speed control mapping constants
+SPEED_DELAY_MAPPING = {
+    "Slow": 0.8,
+    "Normal": 0.5,
+    "Fast": 0.2,
+}
+
 st.set_page_config(layout="wide", page_title="ReCoN Demo")
 
 # Global visual styles
@@ -153,76 +160,106 @@ class ReCoNSimulation:
         return self.engine.snapshot()
 
 
+def get_speed_label_from_delay(delay):
+    """Convert run delay value to human-readable speed label."""
+    # Find the speed label that corresponds to the given delay
+    for speed, delay_val in SPEED_DELAY_MAPPING.items():
+        if delay == delay_val:
+            return speed
+    # Fallback for unknown delay values
+    if delay > 0.5:
+        return "Slow"
+    elif delay < 0.5:
+        return "Fast"
+    else:
+        return "Normal"
+
+
 # Initialize simulation
 if "sim" not in st.session_state:
     st.session_state.sim = ReCoNSimulation()
 
 st.title("🖼️ Request Confirmation Network — Interactive Demo")
 
-# Control panel
-st.sidebar.header("🎛️ Controls")
+# Sidebar: refined control panel
+if "run_delay" not in st.session_state:
+    st.session_state.run_delay = 0.5
 
-col_gen, col_ctrl = st.sidebar.columns(2)
-with col_gen:
-    if st.button("🎲 Generate Scene", type="primary"):
-        img, terminal_vals = st.session_state.sim.generate_scene()
-        st.session_state.img = img
-        st.session_state.tvals = terminal_vals
-        st.session_state.snap = st.session_state.sim.engine.snapshot()
-        st.rerun()
+with st.sidebar:
+    st.header("🎛️ Controls")
 
-with col_ctrl:
-    if st.button("🔄 Reset"):
-        st.session_state.snap = st.session_state.sim.reset_simulation()
-        st.rerun()
+    # Scene controls
+    st.caption("Scene")
+    col_scene_gen, col_scene_reset = st.columns(2)
+    with col_scene_gen:
+        if st.button("🎲 Generate Scene", type="primary", use_container_width=True):
+            img, terminal_vals = st.session_state.sim.generate_scene()
+            st.session_state.img = img
+            st.session_state.tvals = terminal_vals
+            st.session_state.snap = st.session_state.sim.engine.snapshot()
+            st.rerun()
+    with col_scene_reset:
+        if st.button("🔄 Reset", use_container_width=True):
+            st.session_state.snap = st.session_state.sim.reset_simulation()
+            st.rerun()
 
-# Simulation controls
-col_step, col_run, col_pause = st.sidebar.columns(3)
-with col_step:
-    if st.button("⏭️ Step"):
-        st.session_state.snap = st.session_state.sim.step_simulation(1)
-        st.rerun()
+    st.divider()
 
-with col_run:
-    if st.button("▶️ Run", type="primary"):
-        st.session_state.sim.is_running = True
-        st.rerun()
+    # Playback controls
+    st.caption("Playback")
+    col_step, col_runpause = st.columns(2)
+    with col_step:
+        if st.button("⏭️ Step", use_container_width=True):
+            st.session_state.snap = st.session_state.sim.step_simulation(1)
+            st.rerun()
+    with col_runpause:
+        run_label = "▶️ Run" if not st.session_state.sim.is_running else "⏸️ Pause"
+        if st.button(run_label, type="primary", use_container_width=True):
+            st.session_state.sim.is_running = not st.session_state.sim.is_running
+            st.rerun()
 
-with col_pause:
-    if st.button("⏸️ Pause"):
-        st.session_state.sim.is_running = False
-        st.rerun()
+    speed_choice = st.select_slider(
+        "Speed",
+        options=["Slow", "Normal", "Fast"],
+        value=get_speed_label_from_delay(st.session_state.run_delay),
+        help="Controls auto-run speed",
+    )
+    st.session_state.run_delay = SPEED_DELAY_MAPPING[speed_choice]
 
-# Auto-run logic
+    st.divider()
+
+    # Timeline scrubber
+    if len(st.session_state.sim.history) > 1:
+        timeline_idx = st.slider(
+            "⏱️ Timeline",
+            0,
+            len(st.session_state.sim.history) - 1,
+            len(st.session_state.sim.history) - 1,
+        )
+        current_snap = st.session_state.sim.history[timeline_idx]
+    elif st.session_state.sim.history:
+        timeline_idx = 0
+        current_snap = st.session_state.sim.history[0]
+    else:
+        timeline_idx = 0
+        current_snap = st.session_state.get("snap", st.session_state.sim.engine.snapshot())
+
+    st.divider()
+
+    # Unit selector for hover functionality (scoped to sidebar)
+    st.header("🔍 Unit Inspection")
+    unit_options = list(st.session_state.sim.graph.units.keys())
+    selected_unit = st.selectbox(
+        "Select unit for details:",
+        unit_options,
+        index=unit_options.index("u_root") if "u_root" in unit_options else 0,
+    )
+
+# Auto-run logic (uses the chosen speed)
 if st.session_state.sim.is_running:
     st.session_state.snap = st.session_state.sim.step_simulation(1)
-    time.sleep(0.5)  # Control animation speed
+    time.sleep(st.session_state.get("run_delay", 0.5))
     st.rerun()
-
-# Timeline scrubber
-if len(st.session_state.sim.history) > 1:
-    timeline_idx = st.sidebar.slider(
-        "⏱️ Timeline",
-        0,
-        len(st.session_state.sim.history) - 1,
-        len(st.session_state.sim.history) - 1,
-    )
-    current_snap = st.session_state.sim.history[timeline_idx]
-elif st.session_state.sim.history:
-    timeline_idx = 0
-    current_snap = st.session_state.sim.history[0]
-else:
-    timeline_idx = 0
-    current_snap = st.session_state.get("snap", st.session_state.sim.engine.snapshot())
-
-# Unit selector for hover functionality (moved to sidebar for scoping)
-st.sidebar.header("🔍 Unit Inspection")
-unit_options = list(st.session_state.sim.graph.units.keys())
-selected_unit = st.sidebar.selectbox(
-    "Select unit for details:",
-    unit_options,
-    index=unit_options.index("u_root") if "u_root" in unit_options else 0,
-)
 
 # Main display
 col_scene, col_graph = st.columns([1, 1.2])
