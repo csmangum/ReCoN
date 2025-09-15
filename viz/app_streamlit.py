@@ -111,10 +111,17 @@ class ReCoNSimulation:
         if not terminal_ids:
             return
         # Remove edges touching terminals
+        # Convert to set for O(1) lookups instead of O(n) list searches
+        # This optimizes performance when there are many terminals and edges
+        terminal_set = set(terminal_ids)
+
+        # Remove outgoing edges from non-terminal nodes that connect to terminals
         for src_id, edges in list(self.graph.out_edges.items()):
-            self.graph.out_edges[src_id] = [e for e in edges if e.src not in terminal_ids and e.dst not in terminal_ids]
+            self.graph.out_edges[src_id] = [e for e in edges if e.src not in terminal_set and e.dst not in terminal_set]
+
+        # Remove incoming edges to non-terminal nodes that originate from terminals
         for dst_id, edges in list(self.graph.in_edges.items()):
-            self.graph.in_edges[dst_id] = [e for e in edges if e.src not in terminal_ids and e.dst not in terminal_ids]
+            self.graph.in_edges[dst_id] = [e for e in edges if e.src not in terminal_set and e.dst not in terminal_set]
         # Remove terminal units
         for tid in terminal_ids:
             self.graph.units.pop(tid, None)

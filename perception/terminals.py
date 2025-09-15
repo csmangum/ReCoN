@@ -645,7 +645,7 @@ def get_autoencoder(retrain=False):
     model_dir = os.environ.get("RECON_MODEL_DIR", os.path.expanduser("~/.cache/recon"))
     try:
         os.makedirs(model_dir, exist_ok=True)
-    except Exception:
+    except OSError:
         # Fallback to /tmp if unable to create preferred directory
         model_dir = "/tmp"
     model_path = os.path.join(model_dir, "recon_autoencoder.pkl")
@@ -1004,7 +1004,7 @@ def get_cnn(retrain=False):
     model_dir = os.environ.get("RECON_MODEL_DIR", os.path.expanduser("~/.cache/recon"))
     try:
         os.makedirs(model_dir, exist_ok=True)
-    except Exception:
+    except OSError:
         model_dir = "/tmp"
     model_path = os.path.join(model_dir, "recon_tinycnn.pkl")
     if _global_cnn is None:
@@ -1014,7 +1014,7 @@ def get_cnn(retrain=False):
             try:
                 _global_cnn.load(model_path)
                 print("Loaded pretrained TinyCNN")
-            except Exception:
+            except (pickle.UnpicklingError, EOFError, OSError):
                 print("Failed to load TinyCNN, will train new one if enabled")
                 _global_cnn.is_trained = False
         # Optionally train
