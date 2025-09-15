@@ -220,6 +220,19 @@ class Engine:
             float: Gate output value (0.0 if no propagation, positive/negative otherwise)
         """
         state = unit.state
+        a = getattr(unit, "a", 0.0)
+
+        # Optional minimal activation thresholds per link type
+        # If the source activation is below the configured minimum, suppress output
+        min_activation_attr = {
+            LinkType.SUB: "sub_min_source_activation",
+            LinkType.SUR: "sur_min_source_activation",
+            LinkType.POR: "por_min_source_activation",
+            LinkType.RET: "ret_min_source_activation",
+        }
+        threshold_attr = min_activation_attr.get(link_type)
+        if threshold_attr is not None and a < getattr(self.config, threshold_attr):
+            return 0.0
 
         if link_type == LinkType.SUB:
             # SUB: child -> parent evidence propagation
