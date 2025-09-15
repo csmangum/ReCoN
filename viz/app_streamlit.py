@@ -552,7 +552,107 @@ with col_graph:
     elements = build_cytoscape_elements_from_graph(st.session_state.sim)
     selected = render_cytoscape_html(elements, height=780, enable_two_way=True)
 
-        # Build NetworkX graph for visualization
+    if HAS_ST_CYTO:
+        st.divider()
+        st.caption("Inspector")
+        if selected and isinstance(selected, dict) and 'data' in selected:
+            data = selected['data']
+            is_edge = ('source' in data) and ('target' in data)
+            if is_edge:
+                col_w, col_apply = st.columns([3, 1])
+                with col_w:
+                    new_w = st.number_input("Edge weight", value=float(data.get('weight', 1.0)), step=0.1)
+                with col_apply:
+                    if st.button("Apply edge"):
+                        edge_type_name = data.get('edgeType', 'SUB')
+                        try:
+                            link_type = getattr(LinkType, edge_type_name)
+                        except Exception:
+                            link_type = LinkType.SUB
+                        st.session_state.sim.graph.set_edge_weight(data['source'], data['target'], link_type, float(new_w))
+                        st.rerun()
+
+                type_names = [lt.name for lt in list(LinkType)]
+                try:
+                    idx = type_names.index(str(data.get('edgeType', 'SUB')))
+                except Exception:
+                    idx = 0
+                new_type = st.selectbox("Edge type", options=list(LinkType), index=idx, format_func=lambda lt: lt.name)
+                if st.button("Change type"):
+                    try:
+                        old_type = getattr(LinkType, data.get('edgeType', 'SUB'))
+                    except Exception:
+                        old_type = None
+                    w = float(data.get('weight', 1.0))
+                    st.session_state.sim.graph.remove_edge(data['source'], data['target'], old_type)
+                    st.session_state.sim.graph.add_edge(Edge(data['source'], data['target'], new_type, w=w))
+                    st.rerun()
+
+                if st.button("Delete selected edge"):
+                    try:
+                        link_type = getattr(LinkType, data.get('edgeType', 'SUB'))
+                    except Exception:
+                        link_type = None
+                    st.session_state.sim.graph.remove_edge(data['source'], data['target'], link_type)
+                    st.rerun()
+            else:
+                pos = {}
+                unit_meta = st.session_state.sim.graph.units.get(data.get('id'), Unit("dummy", UnitType.SCRIPT)).meta if data.get('id') in st.session_state.sim.graph.units else {}
+                if isinstance(unit_meta.get('pos'), dict):
+                    pos = unit_meta['pos']
+                col1, col2 = st.columns(2)
+                with col1:
+                    new_label = st.text_input("Label", value=str(data.get('label', data.get('id', ''))))
+                    new_size = st.slider("Size", 10, 80, int(data.get('size', 28)))
+                    pos_x = st.number_input("Pos X (optional)", value=float(pos.get('x', 0.0)))
+                    pos_y = st.number_input("Pos Y (optional)", value=float(pos.get('y', 0.0)))
+                with col2:
+                    new_color = st.color_picker("Color", value=str(data.get('color', '#3b82f6')))
+                if st.button("Apply node"):
+                    updates = {"label": new_label, "size": int(new_size), "color": new_color}
+                    if pos_x != 0.0 or pos_y != 0.0:
+                        updates["pos"] = {"x": float(pos_x), "y": float(pos_y)}
+                    st.session_state.sim.graph.set_unit_meta(data['id'], updates)
+                    st.rerun()
+
+                if st.button("Delete selected node"):
+                    st.session_state.sim.graph.remove_unit(data['id'])
+                    st.rerun()
+        else:
+            st.caption("Select a node or edge to edit.")
+
+        st.divider()
+        st.caption("Add elements")
+        with st.form("add_node_form", clear_on_submit=True):
+            coln1, coln2 = st.columns(2)
+            with coln1:
+                nid = st.text_input("New node id")
+                kind = st.selectbox("Kind", [UnitType.SCRIPT, UnitType.TERMINAL], format_func=lambda v: v.name)
+            with coln2:
+                nlabel = st.text_input("Label (optional)")
+                ncolor = st.color_picker("Color", value="#22d3ee")
+            nsize = st.slider("Size", 10, 80, 28, key="add_size")
+            submitted = st.form_submit_button("Add Node")
+            if submitted and nid:
+                st.session_state.sim.graph.add_unit(Unit(nid, kind, state=State.INACTIVE, a=0.0, meta={"label": nlabel or nid, "color": ncolor, "size": int(nsize)}))
+                st.rerun()
+
+        with st.form("add_edge_form", clear_on_submit=True):
+            units = list(st.session_state.sim.graph.units.keys())
+            if units:
+                cole1, cole2, cole3, cole4 = st.columns(4)
+                with cole1:
+                    src = st.selectbox("Source", options=units)
+                with cole2:
+                    dst = st.selectbox("Target", options=units)
+                with cole3:
+                    etype = st.selectbox("Type", options=list(LinkType), format_func=lambda lt: lt.name)
+                with cole4:
+                    ew = st.number_input("Weight", value=1.0, step=0.1)
+                add_edge_btn = st.form_submit_button("Add Edge")
+                if add_edge_btn and src and dst:
+                    st.session_state.sim.graph.add_edge(Edge(src, dst, etype, w=float(ew)))
+                    st.rerun()
         G = nx.DiGraph()
         state_colors = {
             "INACTIVE": "#cccccc",
