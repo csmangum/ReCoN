@@ -37,7 +37,7 @@ def draw_rect(img, x, y, w, h, val=1.0):
     Returns:
         numpy.ndarray: The modified image array (same as input img)
     """
-    img[y:y+h, x:x+w] = val
+    img[y : y + h, x : x + w] = val
     return img
 
 
@@ -66,7 +66,7 @@ def draw_triangle(img, x, y, base, height, val=1.0):
         # The formula creates wider rows as we move down from the apex
         start = x + (height - i - 1)  # left boundary moves right as i increases
         end = x + base - (height - i - 1)  # right boundary moves left as i increases
-        img[y+i, start:end] = val
+        img[y + i, start:end] = val
     return img
 
 
@@ -99,9 +99,11 @@ def draw_trapezoid(img, top_x, top_w, base_x, base_w, y, h, val=1.0):
         t = 0.0 if height == 1 else i / (height - 1)
         curr_x = int(round((1.0 - t) * top_x + t * base_x))
         curr_w = int(round((1.0 - t) * top_w + t * base_w))
+        curr_x = max(0, curr_x)
+        curr_w = max(0, curr_w)
         yy = y + i
         if 0 <= yy < img_h and curr_w > 0:
-            start = max(0, curr_x)
+            start = curr_x
             end = min(img_w, curr_x + curr_w)
             if start < end:
                 img[yy, start:end] = val
@@ -126,6 +128,11 @@ def draw_disk_approx(img, cx, cy, r, val=1.0):
     if radius <= 0:
         return img
     img_h, img_w = img.shape
+
+    # Validate center coordinates to prevent overflow
+    cx = max(-radius, min(img_w + radius, cx))
+    cy = max(-radius, min(img_h + radius, cy))
+
     x0 = max(0, cx - radius)
     x1 = min(img_w - 1, cx + radius)
     y0 = max(0, cy - radius)
@@ -207,6 +214,7 @@ def draw_line_thick(img, x0, y0, x1, y1, thickness, val=1.0):
                 img[yy, xx] = val
     return img
 
+
 def make_house_scene(size=64, noise=0.05, scale_factor=1.0, position_offset=(0, 0)):
     """
     Generate a synthetic house scene with body, roof, and door.
@@ -230,23 +238,25 @@ def make_house_scene(size=64, noise=0.05, scale_factor=1.0, position_offset=(0, 
 
     # Draw house body (rectangular walls)
     # Size: 1/3 of canvas dimensions, scaled and positioned with offsets
-    base_width, base_height = int(size//3 * scale_factor), int(size//3 * scale_factor)
+    base_width, base_height = int(size // 3 * scale_factor), int(
+        size // 3 * scale_factor
+    )
     bw, bh = max(6, base_width), max(6, base_height)  # minimum size constraints
-    bx = max(0, min(size - bw, size//2 - bw//2 + position_offset[0]))
-    by = max(0, min(size - bh, size//2 + position_offset[1]))
+    bx = max(0, min(size - bw, size // 2 - bw // 2 + position_offset[0]))
+    by = max(0, min(size - bh, size // 2 + position_offset[1]))
     draw_rect(img, bx, by, bw, bh, 0.7)
 
     # Draw triangular roof above the body
     # Roof spans same width as body, half the height, positioned just above body
-    rx, ry = bx, max(0, by - bh//2)  # align with body left edge, position above body
-    roof_height = max(3, bh//2)  # minimum roof height
+    rx, ry = bx, max(0, by - bh // 2)  # align with body left edge, position above body
+    roof_height = max(3, bh // 2)  # minimum roof height
     if ry >= 0 and rx + bw <= size:  # only draw if roof fits in canvas
         draw_triangle(img, rx, ry, bw, roof_height, 1.0)
 
     # Draw door on the front of the house body
     # Door is small (1/5 body width), tall (half body height), centered on body
-    dw, dh = max(2, bw//5), max(3, bh//2)  # door dimensions relative to body
-    dx = max(bx, min(bx + bw - dw, bx + bw//2 - dw//2))  # center on body
+    dw, dh = max(2, bw // 5), max(3, bh // 2)  # door dimensions relative to body
+    dx = max(bx, min(bx + bw - dw, bx + bw // 2 - dw // 2))  # center on body
     dy = max(by, by + bh - dh)  # align with bottom
     if dx + dw <= size and dy + dh <= size:  # only draw if door fits
         draw_rect(img, dx, dy, dw, dh, 0.9)
@@ -281,14 +291,16 @@ def make_barn_scene(size=64, noise=0.05, scale_factor=1.0, position_offset=(0, 0
     img = canvas(size)
 
     # Draw barn body (wider than house)
-    base_width, base_height = int(size//2 * scale_factor), int(size//3 * scale_factor)
+    base_width, base_height = int(size // 2 * scale_factor), int(
+        size // 3 * scale_factor
+    )
     bw, bh = max(8, base_width), max(6, base_height)
-    bx = max(0, min(size - bw, size//2 - bw//2 + position_offset[0]))
-    by = max(0, min(size - bh, size//2 + position_offset[1]))
+    bx = max(0, min(size - bw, size // 2 - bw // 2 + position_offset[0]))
+    by = max(0, min(size - bh, size // 2 + position_offset[1]))
     draw_rect(img, bx, by, bw, bh, 0.6)
 
     # Draw arched roof (approximated with multiple horizontal rectangles)
-    roof_height = max(4, bh//2)
+    roof_height = max(4, bh // 2)
     ry = max(0, by - roof_height)
     if ry >= 0:
         # Create arch effect with decreasing width rectangles
@@ -301,8 +313,8 @@ def make_barn_scene(size=64, noise=0.05, scale_factor=1.0, position_offset=(0, 0
                     draw_rect(img, arch_x, ry + i, arch_width, 1, 0.8)
 
     # Draw large barn door opening (bigger than house door)
-    dw, dh = max(4, bw//3), max(4, int(bh * 0.7))
-    dx = max(bx, min(bx + bw - dw, bx + bw//2 - dw//2))
+    dw, dh = max(4, bw // 3), max(4, int(bh * 0.7))
+    dx = max(bx, min(bx + bw - dw, bx + bw // 2 - dw // 2))
     dy = max(by, by + bh - dh)
     if dx + dw <= size and dy + dh <= size:
         draw_rect(img, dx, dy, dw, dh, 0.3)  # darker opening
@@ -315,7 +327,7 @@ def make_barn_scene(size=64, noise=0.05, scale_factor=1.0, position_offset=(0, 0
     return img
 
 
-def make_occluded_scene(size=64, noise=0.05, occlusion_type='tree'):
+def make_occluded_scene(size=64, noise=0.05, occlusion_type="tree"):
     """
     Generate a scene with partial occlusion of the main object.
 
@@ -331,7 +343,7 @@ def make_occluded_scene(size=64, noise=0.05, occlusion_type='tree'):
     img = make_house_scene(size, noise=0, scale_factor=0.8)
 
     # Add occlusion based on type
-    if occlusion_type == 'tree':
+    if occlusion_type == "tree":
         # Add a simple tree (vertical line + circle approximation)
         tree_x = size // 4
         tree_height = size // 2
@@ -340,23 +352,23 @@ def make_occluded_scene(size=64, noise=0.05, occlusion_type='tree'):
         draw_rect(img, tree_x - 1, tree_y, 3, tree_height, 0.4)
         # Tree foliage (multiple overlapping rectangles to approximate circle)
         foliage_size = size // 6
-        for i in range(-foliage_size//2, foliage_size//2, 2):
-            for j in range(-foliage_size//2, foliage_size//2, 2):
-                if i*i + j*j < (foliage_size//2)**2:  # rough circle check
+        for i in range(-foliage_size // 2, foliage_size // 2, 2):
+            for j in range(-foliage_size // 2, foliage_size // 2, 2):
+                if i * i + j * j < (foliage_size // 2) ** 2:  # rough circle check
                     fx, fy = tree_x + i, tree_y + j
-                    if 0 <= fx < size-1 and 0 <= fy < size-1:
+                    if 0 <= fx < size - 1 and 0 <= fy < size - 1:
                         draw_rect(img, fx, fy, 2, 2, 0.5)
 
-    elif occlusion_type == 'cloud':
+    elif occlusion_type == "cloud":
         # Add cloud-like occlusion (multiple overlapping ovals)
         cloud_y = size // 6
         for i in range(3):
-            cloud_x = size//4 + i * 8
+            cloud_x = size // 4 + i * 8
             cloud_w, cloud_h = 12, 6
             if cloud_x + cloud_w <= size and cloud_y + cloud_h <= size:
                 draw_rect(img, cloud_x, cloud_y, cloud_w, cloud_h, 0.9)
 
-    elif occlusion_type == 'box':
+    elif occlusion_type == "box":
         # Add rectangular obstruction
         box_size = size // 4
         box_x = 3 * size // 4 - box_size
@@ -372,8 +384,13 @@ def make_occluded_scene(size=64, noise=0.05, occlusion_type='tree'):
     return img
 
 
-def make_varied_scene(scene_type='house', size=64, noise=0.05, 
-                     scale_range=(0.7, 1.3), position_variance=0.2):
+def make_varied_scene(
+    scene_type="house",
+    size=64,
+    noise=0.05,
+    scale_range=(0.7, 1.3),
+    position_variance=0.2,
+):
     """
     Generate a scene with random variations in size and position.
 
@@ -389,31 +406,31 @@ def make_varied_scene(scene_type='house', size=64, noise=0.05,
     """
     # Random scale factor
     scale_factor = np.random.uniform(scale_range[0], scale_range[1])
-    
+
     # Random position offset
     max_offset = int(size * position_variance)
     offset_x = np.random.randint(-max_offset, max_offset + 1)
     offset_y = np.random.randint(-max_offset, max_offset + 1)
-    
-    if scene_type == 'house':
+
+    if scene_type == "house":
         return make_house_scene(size, noise, scale_factor, (offset_x, offset_y))
-    elif scene_type == 'barn':
+    elif scene_type == "barn":
         return make_barn_scene(size, noise, scale_factor, (offset_x, offset_y))
-    elif scene_type == 'occluded':
-        occlusion_types = ['tree', 'cloud', 'box']
+    elif scene_type == "occluded":
+        occlusion_types = ["tree", "cloud", "box"]
         occlusion = np.random.choice(occlusion_types)
         return make_occluded_scene(size, noise, occlusion)
-    elif scene_type == 'church':
+    elif scene_type == "church":
         return make_church_scene(size, noise, scale_factor, (offset_x, offset_y))
-    elif scene_type == 'tent':
+    elif scene_type == "tent":
         return make_tent_scene(size, noise, scale_factor, (offset_x, offset_y))
-    elif scene_type == 'tower':
+    elif scene_type == "tower":
         return make_tower_scene(size, noise, scale_factor, (offset_x, offset_y))
-    elif scene_type == 'castle':
+    elif scene_type == "castle":
         return make_castle_scene(size, noise, scale_factor, (offset_x, offset_y))
-    elif scene_type == 'windmill':
+    elif scene_type == "windmill":
         return make_windmill_scene(size, noise, scale_factor, (offset_x, offset_y))
-    elif scene_type == 'lighthouse':
+    elif scene_type == "lighthouse":
         return make_lighthouse_scene(size, noise, scale_factor, (offset_x, offset_y))
     else:
         # Default to house
@@ -549,7 +566,12 @@ def make_tower_scene(size=64, noise=0.05, scale_factor=1.0, position_offset=(0, 
     for i in range(num_windows):
         wx = tx + tw // 2 - win_size // 2
         wy = ty + (i + 1) * (th // (num_windows + 1)) - win_size // 2
-        if 0 <= wx < size and 0 <= wy < size and wx + win_size <= size and wy + win_size <= size:
+        if (
+            0 <= wx < size
+            and 0 <= wy < size
+            and wx + win_size <= size
+            and wy + win_size <= size
+        ):
             draw_rect(img, wx, wy, win_size, win_size, 0.9)
 
     # Noise
@@ -628,7 +650,14 @@ def make_castle_scene(size=64, noise=0.05, scale_factor=1.0, position_offset=(0,
     return img
 
 
-def make_windmill_scene(size=64, noise=0.05, scale_factor=1.0, position_offset=(0, 0), blades=4, blade_angle_deg=None):
+def make_windmill_scene(
+    size=64,
+    noise=0.05,
+    scale_factor=1.0,
+    position_offset=(0, 0),
+    blades=4,
+    blade_angle_deg=None,
+):
     """
     Generate a synthetic windmill scene with a tower, roof, hub, and blades.
 
@@ -667,9 +696,9 @@ def make_windmill_scene(size=64, noise=0.05, scale_factor=1.0, position_offset=(
     # Determine starting angle
     if blade_angle_deg is None:
         blade_angle_deg = float(np.random.uniform(0.0, 360.0))
-    blades = max(2, min(8, int(blades)))
-    angle_step = 360.0 / float(blades)
-    for b in range(blades):
+    num_blades = max(2, min(8, int(blades)))
+    angle_step = 360.0 / float(num_blades)
+    for b in range(num_blades):
         ang = np.deg2rad(blade_angle_deg + b * angle_step)
         dx = int(round(np.cos(ang) * blade_len))
         dy = int(round(np.sin(ang) * blade_len))
@@ -687,7 +716,9 @@ def make_windmill_scene(size=64, noise=0.05, scale_factor=1.0, position_offset=(
     return img
 
 
-def make_lighthouse_scene(size=64, noise=0.05, scale_factor=1.0, position_offset=(0, 0), beam_angle_deg=0.0):
+def make_lighthouse_scene(
+    size=64, noise=0.05, scale_factor=1.0, position_offset=(0, 0), beam_angle_deg=0.0
+):
     """
     Generate a synthetic lighthouse with striped body, top cap, and light beam.
 
