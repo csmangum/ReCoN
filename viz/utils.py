@@ -35,7 +35,7 @@ def build_cytoscape_elements(graph: Graph) -> List[Dict[str, Any]]:
                 "label": label,
                 "color": color,
                 "size": size,
-                "group": getattr(graph_unit, "kind", "unit"),
+                "group": graph_unit.kind.name if hasattr(graph_unit, "kind") and graph_unit.kind else "unit",
                 "state": state_name,
                 "activation": activation,
             }
@@ -46,7 +46,7 @@ def build_cytoscape_elements(graph: Graph) -> List[Dict[str, Any]]:
         elements.append(node)
 
     # Edges
-    for src_id, edges in graph.out_edges.items():
+    for edges in graph.out_edges.values():
         for e in edges:
             edge_type = e.type.name if hasattr(e, "type") else "EDGE"
             elements.append({
