@@ -22,7 +22,8 @@ from perception.terminals import (
     geometric_features, advanced_terminals_from_image, SimpleAutoencoder,
     autoencoder_terminals_from_image, comprehensive_terminals_from_image,
     sample_scene_and_terminals, advanced_sample_scene_and_terminals,
-    comprehensive_sample_scene_and_terminals
+    comprehensive_sample_scene_and_terminals, TinyCNN, get_cnn,
+    cnn_terminals_from_image, deep_comprehensive_terminals_from_image
 )
 from perception.dataset import make_house_scene, make_barn_scene, canvas
 
@@ -428,6 +429,67 @@ class TestFeatureDiscrimination(unittest.TestCase):
                 # Just check that the features are computed
                 self.assertIsInstance(diff, (float, np.floating))
 
+
+class TestTinyCNN(unittest.TestCase):
+    """Tests for the TinyCNN feature learner and CNN terminals."""
+
+    def test_tinycnn_initialization(self):
+        cnn = TinyCNN(kernel_size=5, num_filters=6, learning_rate=0.02)
+        self.assertEqual(cnn.kernel_size, 5)
+        self.assertEqual(cnn.num_filters, 6)
+        self.assertFalse(cnn.is_trained)
+        # Filters should have correct shape and roughly unit norms
+        self.assertEqual(cnn.filters.shape, (6, 5, 5))
+        norms = [np.linalg.norm(cnn.filters[i]) for i in range(6)]
+        for n in norms:
+            self.assertGreater(n, 0.9)  # near unit
+            self.assertLess(n, 1.1)
+
+    def test_tinycnn_training_and_encoding(self):
+        # Create small training set
+        imgs = [make_house_scene(size=32, noise=0.0), make_barn_scene(size=32, noise=0.0)]
+        cnn = TinyCNN(kernel_size=5, num_filters=4, learning_rate=0.05)
+        cnn.train(imgs, epochs=2, patches_per_image=10)
+        self.assertTrue(cnn.is_trained)
+
+        # Encode returns vector of length num_filters in [0,1]
+        feats = cnn.encode(imgs[0])
+        self.assertEqual(len(feats), 4)
+        self.assertTrue(np.all(feats >= 0.0))
+        self.assertTrue(np.all(feats <= 1.0))
+
+    def test_tinycnn_save_and_load(self):
+        cnn = TinyCNN(kernel_size=3, num_filters=3, learning_rate=0.01)
+        # Force a known state
+        cnn.is_trained = True
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, 'tinycnn.pkl')
+            cnn.save(path)
+            cnn2 = TinyCNN(kernel_size=7, num_filters=7, learning_rate=0.5)
+            cnn2.load(path)
+            self.assertTrue(cnn2.is_trained)
+            self.assertEqual(cnn2.filters.shape, cnn.filters.shape)
+            self.assertEqual(cnn2.kernel_size, cnn.kernel_size)
+            self.assertEqual(cnn2.num_filters, cnn.num_filters)
+
+    def test_cnn_terminals_from_image_structure(self):
+        img = make_house_scene(size=64, noise=0.0)
+        # Use global cnn (untrained allowed)
+        terms = cnn_terminals_from_image(img)
+        # Expect a handful of cnn terminals
+        self.assertTrue(len(terms) >= 3)
+        for k, v in terms.items():
+            self.assertTrue(k.startswith('t_cnn_'))
+            self.assertIsInstance(v, float)
+            self.assertGreaterEqual(v, 0.0)
+            self.assertLessEqual(v, 1.0)
+
+    def test_deep_comprehensive_includes_cnn(self):
+        img = make_house_scene(size=64, noise=0.0)
+        terms = deep_comprehensive_terminals_from_image(img)
+        # Should include advanced (12), AE (4), plus CNN (>=3)
+        self.assertTrue(any(k.startswith('t_cnn_') for k in terms))
+        self.assertGreaterEqual(len(terms), 12 + 4 + 3)
 
 if __name__ == '__main__':
     unittest.main()
