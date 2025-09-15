@@ -34,6 +34,13 @@ from recon_core.engine import Engine
 from recon_core.enums import LinkType, State, UnitType
 from recon_core.graph import Edge, Graph, Unit
 
+# Speed control mapping constants
+SPEED_DELAY_MAPPING = {
+    "Slow": 0.8,
+    "Normal": 0.5,
+    "Fast": 0.2,
+}
+
 st.set_page_config(layout="wide", page_title="ReCoN Demo")
 
 # Global visual styles
@@ -153,6 +160,21 @@ class ReCoNSimulation:
         return self.engine.snapshot()
 
 
+def get_speed_label_from_delay(delay):
+    """Convert run delay value to human-readable speed label."""
+    # Find the speed label that corresponds to the given delay
+    for speed, delay_val in SPEED_DELAY_MAPPING.items():
+        if delay == delay_val:
+            return speed
+    # Fallback for unknown delay values
+    if delay > 0.5:
+        return "Slow"
+    elif delay < 0.5:
+        return "Fast"
+    else:
+        return "Normal"
+
+
 # Initialize simulation
 if "sim" not in st.session_state:
     st.session_state.sim = ReCoNSimulation()
@@ -199,10 +221,10 @@ with st.sidebar:
     speed_choice = st.select_slider(
         "Speed",
         options=["Slow", "Normal", "Fast"],
-        value="Normal" if st.session_state.run_delay == 0.5 else ("Slow" if st.session_state.run_delay > 0.5 else "Fast"),
+        value=get_speed_label_from_delay(st.session_state.run_delay),
         help="Controls auto-run speed",
     )
-    st.session_state.run_delay = {"Slow": 0.8, "Normal": 0.5, "Fast": 0.2}[speed_choice]
+    st.session_state.run_delay = SPEED_DELAY_MAPPING[speed_choice]
 
     st.divider()
 
