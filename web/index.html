@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Graph Viz</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <script defer src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+    <script defer src="https://unpkg.com/cytoscape-cose-bilkent@4.1.0/cytoscape-cose-bilkent.js"></script>
+    <script defer src="app.js"></script>
+  </head>
+  <body>
+    <div id="app">
+      <header class="app-header">
+        <div class="brand">Graph Viz</div>
+        <div class="toolbar" id="toolbar"></div>
+        <div class="search">
+          <input id="searchInput" type="search" placeholder="Search nodes... (Ctrl+K)" />
+        </div>
+      </header>
+      <main class="content">
+        <aside class="panel left">
+          <div class="section">
+            <div class="section-title">Layouts</div>
+            <div class="layout-buttons">
+              <button data-layout="cose-bilkent">CoSE Bilkent</button>
+              <button data-layout="grid">Grid</button>
+              <button data-layout="circle">Circle</button>
+              <button data-layout="breadthfirst">Breadthfirst</button>
+              <button data-layout="concentric">Concentric</button>
+            </div>
+          </div>
+          <div class="section">
+            <div class="section-title">Actions</div>
+            <div class="actions">
+              <button id="addNodeBtn">Add Node (N)</button>
+              <button id="addEdgeBtn">Connect (E)</button>
+              <button id="deleteBtn">Delete (Del)</button>
+              <button id="resetViewBtn">Reset View (0)</button>
+            </div>
+          </div>
+          <div class="section">
+            <div class="section-title">Import / Export</div>
+            <div class="actions">
+              <input type="file" id="importFile" accept="application/json" />
+              <button id="exportBtn">Export JSON</button>
+            </div>
+          </div>
+        </aside>
+
+        <section class="canvas" id="cy"></section>
+
+        <aside class="panel right">
+          <div class="section">
+            <div class="section-title">Inspector</div>
+            <form id="inspector" class="inspector">
+              <div class="field">
+                <label>ID</label>
+                <input name="id" type="text" readonly />
+              </div>
+              <div class="field">
+                <label>Label</label>
+                <input name="label" type="text" />
+              </div>
+              <div class="field">
+                <label>Color</label>
+                <input name="color" type="color" value="#3b82f6" />
+              </div>
+              <div class="field">
+                <label>Size</label>
+                <input name="size" type="number" min="10" max="80" value="28" />
+              </div>
+              <div class="field">
+                <label>Group</label>
+                <input name="group" type="text" placeholder="e.g. service" />
+              </div>
+              <div class="divider"></div>
+              <div class="field">
+                <label>Edge Weight</label>
+                <input name="edgeWeight" type="number" step="0.1" />
+              </div>
+              <div class="actions">
+                <button type="button" id="applyBtn">Apply</button>
+              </div>
+            </form>
+          </div>
+        </aside>
+      </main>
+      <footer class="app-footer">
+        <div>Tips: Click to select. Shift+Click to multi-select. Drag background to pan, wheel to zoom.</div>
+      </footer>
+    </div>
+  </body>
+  </html>
+
