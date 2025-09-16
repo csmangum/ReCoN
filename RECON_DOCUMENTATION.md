@@ -263,6 +263,188 @@ class Engine:
         """Create current network state snapshot"""
 ```
 
+## Graph Validation System
+
+The ReCoN implementation includes a comprehensive graph validation system to ensure network integrity, detect structural issues, and optimize performance. This system provides both automated validation and detailed performance analysis.
+
+### Validation Overview
+
+The validation system consists of multiple validation modules that can be run individually or collectively:
+
+```python
+from recon_core.graph import Graph, Unit, Edge
+from recon_core.enums import UnitType, LinkType
+
+# Create a graph with potential issues
+graph = Graph()
+# ... add units and edges ...
+
+# Run all validations
+validation_results = graph.validate_all(strict_activation=True)
+
+# Get summary
+summary = graph.get_validation_summary(validation_results)
+print(f"Issues found: {summary['total_issues']} total, {summary['errors']} errors, {summary['warnings']} warnings")
+
+# Check overall validity
+is_valid = graph.is_valid()
+print(f"Graph is {'valid' if is_valid else 'invalid'}")
+```
+
+### Cycle Detection
+
+Detects problematic cycles in the network that could cause infinite loops or unexpected behavior:
+
+```python
+# Check for cycles in all link types
+all_cycles = graph.validate_cycles()
+
+# Check specific link type
+sub_cycles = graph.validate_cycles(LinkType.SUB)
+sur_cycles = graph.validate_cycles(LinkType.SUR)
+por_cycles = graph.validate_cycles(LinkType.POR)
+ret_cycles = graph.validate_cycles(LinkType.RET)
+```
+
+**Cycle Detection Rules:**
+- **SUB cycles**: Generally problematic (infinite evidence propagation)
+- **SUR cycles**: Generally problematic (infinite request propagation)
+- **POR cycles**: May be acceptable for circular temporal processes
+- **RET cycles**: Expected and normal for feedback loops
+
+### Link Consistency Validation
+
+Validates that link types are used appropriately based on unit types:
+
+```python
+link_issues = graph.validate_link_consistency()
+```
+
+**Link Type Rules:**
+- **SUB links**: Should connect terminals → scripts (evidence flow)
+- **SUR links**: Should connect scripts → children (request flow)
+- **POR links**: Should only connect scripts ↔ scripts (temporal precedence)
+- **RET links**: Should only connect scripts ↔ scripts (temporal feedback)
+- **Edge weights**: Must be within [0.0, 1.0] range
+
+### Unit Relationship Validation
+
+Ensures units follow proper hierarchical and structural patterns:
+
+```python
+relationship_issues = graph.validate_unit_relationships()
+```
+
+**Unit Relationship Rules:**
+- **Terminals**: Should only participate in SUB (evidence) and SUR (request) relationships
+- **Scripts**: Should form proper hierarchical structures without direct SUB links
+- **Root Scripts**: Should exist (scripts with no incoming SUB links)
+- **Reachability**: All units should be reachable from root scripts
+
+### Activation Bounds Validation
+
+Validates activation levels and thresholds are within proper bounds:
+
+```python
+activation_issues = graph.validate_activation_bounds(strict=True)
+```
+
+**Activation Validation Rules:**
+- Activation levels must be within [0.0, 1.0]
+- Threshold values must be within [0.0, 1.0]
+- Consistency checks for threshold/activation relationships
+- Warning for unusual threshold/activation combinations
+
+### Graph Integrity Validation
+
+Comprehensive structural validation of the network:
+
+```python
+integrity_issues = graph.validate_graph_integrity()
+```
+
+**Integrity Checks:**
+- **Orphaned Units**: Units with no connections
+- **Invalid Edges**: Edges referencing non-existent units
+- **Connectivity Issues**: Disconnected graph components
+- **Structure Warnings**: Terminals without parent scripts
+
+### Performance Metrics Analysis
+
+Analyzes graph complexity, efficiency, and potential bottlenecks:
+
+```python
+performance = graph.analyze_performance_metrics()
+```
+
+**Performance Metrics:**
+- **Structure Metrics**: Unit/edge counts, terminal ratio, connectivity
+- **Complexity Metrics**: Degree distribution, link type distribution, max degree
+- **Efficiency Indicators**: Connected components, isolated units, hierarchy depth
+- **Bottleneck Warnings**: High degree nodes, deep hierarchies, cycles
+
+### Custom Validation Rules
+
+Extensible framework for domain-specific validation:
+
+```python
+def validate_max_fan_out(graph):
+    """Custom rule: Check that no unit has more than 5 outgoing connections."""
+    issues = {}
+    max_fan_out = 5
+
+    for unit_id, edges in graph.out_edges.items():
+        if len(edges) > max_fan_out:
+            if 'fan_out_issues' not in issues:
+                issues['fan_out_issues'] = []
+            issues['fan_out_issues'].append(
+                f"Unit '{unit_id}' has {len(edges)} outgoing connections (max allowed: {max_fan_out})"
+            )
+    return issues
+
+# Add custom rule
+graph.add_custom_validation_rule('max_fan_out', validate_max_fan_out)
+
+# Run custom validations
+custom_results = graph.validate_custom_rules()
+```
+
+### Graph Statistics and Health Scoring
+
+Comprehensive graph analysis with health scoring:
+
+```python
+stats = graph.get_graph_statistics()
+
+print(f"Basic Stats: {stats['basic_stats']}")
+print(f"Validation Summary: {stats['validation_summary']}")
+print(f"Performance Metrics: {stats['performance_metrics']}")
+print(f"Overall Health Score: {stats['health_score']:.3f}")
+```
+
+**Health Score Components:**
+- **Error Penalty**: Heavily penalizes validation errors
+- **Warning Penalty**: Moderately penalizes warnings
+- **Performance Penalty**: Penalizes high complexity and connectivity issues
+- **Range**: 0.0 (very unhealthy) to 1.0 (perfect health)
+
+### Validation Demo
+
+Run the comprehensive validation demonstration:
+
+```bash
+python scripts/graph_validation_demo.py
+```
+
+This demo showcases:
+- Cycle detection across all link types
+- Link consistency validation with rule violations
+- Unit relationship validation with structural issues
+- Activation bounds checking with out-of-range values
+- Graph integrity validation with orphaned units
+- Performance metrics analysis with complexity indicators
+- Custom validation rules with domain-specific constraints
+
 ## GraphML Export
 
 ReCoN graphs can be exported to GraphML format for analysis in external graph visualization and analysis tools.

@@ -522,33 +522,47 @@ with col_graph:
         "SUPPRESSED": "#756bb1",
     }
     state_sizes = {
-        "INACTIVE": 300,
-        "REQUESTED": 500,
-        "WAITING": 400,
-        "ACTIVE": 600,
-        "TRUE": 700,
-        "CONFIRMED": 800,
-        "FAILED": 400,
-        "SUPPRESSED": 350,
+        "INACTIVE": 1800,
+        "REQUESTED": 2400,
+        "WAITING": 2100,
+        "ACTIVE": 2700,
+        "TRUE": 3000,
+        "CONFIRMED": 3300,
+        "FAILED": 2100,
+        "SUPPRESSED": 1900,
     }
 
-    # Node layout positions (dynamic terminals placed on top row)
+    # Node layout positions (hierarchical flow: root -> scripts -> terminals)
     pos = {
-        "u_root": (0, 0),
-        "u_roof": (-1, 1),
-        "u_body": (0, 1),
-        "u_door": (1, 1),
+        "u_root": (0, 3),
+        "u_roof": (-1, 2),
+        "u_body": (0, 2),
+        "u_door": (1, 2),
     }
-    # Place terminal nodes evenly across top row
-    terminal_nodes = [
-        n
-        for n, d in st.session_state.sim.graph.units.items()
-        if d.kind == UnitType.TERMINAL
+    # Place terminal nodes grouped by their parent script units
+    terminal_positions = {
+        "t_horz": (-1.0, 1.0),  # near u_roof
+        "t_vert": (1.0, 1.0),   # near u_door
+        "t_mean": (0.0, 1.0),   # near u_body
+    }
+
+    # Position known terminals first
+    for term_name, position in terminal_positions.items():
+        if term_name in st.session_state.sim.graph.units:
+            pos[term_name] = position
+
+    # Position any remaining terminals evenly across the bottom
+    all_terminals = [
+        n for n in st.session_state.sim.graph.units.keys()
+        if st.session_state.sim.graph.units[n].kind == UnitType.TERMINAL
     ]
-    if terminal_nodes:
-        xs = np.linspace(-1.5, 1.5, num=len(terminal_nodes))
-        for x, n in zip(xs, terminal_nodes):
-            pos[n] = (float(x), 2.0)
+    remaining_terminals = [t for t in all_terminals if t not in terminal_positions]
+
+    if remaining_terminals:
+        # Spread remaining terminals across available space
+        xs = np.linspace(-1.5, 1.5, num=len(remaining_terminals))
+        for x, n in zip(xs, remaining_terminals):
+            pos[n] = (float(x), 0.8)  # Slightly lower for auto-generated terminals
 
     # Add nodes with enhanced styling
     for node_id, graph_unit in st.session_state.sim.graph.units.items():
