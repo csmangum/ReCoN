@@ -8,7 +8,6 @@ graph viz showing SUR/SUB/POR transitions.
 
 Usage examples:
   manim -pqh scripts/manim_recon_house.py HouseWalkthrough
-  manim -pqh scripts/manim_recon_house.py AllScenes
 
 Requires manim-community installed. See README at bottom of file for basics.
 """
@@ -396,7 +395,9 @@ class HouseWalkthrough(Scene):
 # - Install Manim Community (and Cairo/ffmpeg per platform):
 #     pip install manim
 # - Render a quick, low-res preview:
-#     manim -pqh scripts/manim_recon_house.py HouseWalkthrough
-# - For higher quality (e.g., 60 fps, 1080p), adjust flags:
-#     manim -p scripts/manim_recon_house.py HouseWalkthrough -r 1920,1080 --fps 60
+#     make render-fast
+#     # Or manually: manim -ql --fps 30 --media_dir output/media -o recon_house_walkthrough_preview scripts/manim_recon_house.py HouseWalkthrough
+# - For higher quality (e.g., 60 fps, 1080p), use:
+#     make render
+#     # Or manually: manim -qp --fps 60 -r 1920,1080 --media_dir output/media -o recon_house_walkthrough scripts/manim_recon_house.py HouseWalkthrough
 
