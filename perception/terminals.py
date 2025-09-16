@@ -1014,8 +1014,8 @@ def get_cnn(retrain=False):
             try:
                 _global_cnn.load(model_path)
                 print("Loaded pretrained TinyCNN")
-            except (pickle.UnpicklingError, EOFError, OSError):
-                print("Failed to load TinyCNN, will train new one if enabled")
+            except (pickle.UnpicklingError, EOFError, OSError) as e:
+                print(f"Failed to load TinyCNN (unpickling or file error: {e}), will train new one if enabled")
                 _global_cnn.is_trained = False
         # Optionally train
         train_enabled = os.environ.get("RECON_TRAIN_CNN", "0") in ("1", "true", "True")
