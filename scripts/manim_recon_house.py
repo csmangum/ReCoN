@@ -1,4 +1,4 @@
-THIS SHOULD BE A LINTER ERROR"""
+"""
 Manim Community animation: Step-by-step ReCoN activation on the synthetic house scene.
 
 This script renders a clean, polished walkthrough of the ReCoN network during
