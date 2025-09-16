@@ -37,7 +37,7 @@ def draw_rect(img, x, y, w, h, val=1.0):
     Returns:
         numpy.ndarray: The modified image array (same as input img)
     """
-    img[y:y+h, x:x+w] = val
+    img[y : y + h, x : x + w] = val
     return img
 
 
@@ -66,7 +66,152 @@ def draw_triangle(img, x, y, base, height, val=1.0):
         # The formula creates wider rows as we move down from the apex
         start = x + (height - i - 1)  # left boundary moves right as i increases
         end = x + base - (height - i - 1)  # right boundary moves left as i increases
-        img[y+i, start:end] = val
+        img[y + i, start:end] = val
+    return img
+
+
+def draw_trapezoid(img, top_x, top_w, base_x, base_w, y, h, val=1.0):
+    """
+    Draw a filled vertical trapezoid by scanlines.
+
+    The shape is defined by a top edge at row y with width top_w starting at top_x,
+    and a base edge at row y+h-1 with width base_w starting at base_x. Intermediate
+    rows linearly interpolate both the starting x and width.
+
+    Args:
+        img: Image array to draw on (modified in-place)
+        top_x: Left x-coordinate of the top edge
+        top_w: Width of the top edge
+        base_x: Left x-coordinate of the base edge
+        base_w: Width of the base edge
+        y: Top y-coordinate of the trapezoid
+        h: Height of the trapezoid in pixels
+        val: Intensity value to fill (default: 1.0)
+
+    Returns:
+        numpy.ndarray: The modified image array
+    """
+    height = max(0, int(h))
+    if height <= 0:
+        return img
+    img_h, img_w = img.shape
+    for i in range(height):
+        t = 0.0 if height == 1 else i / (height - 1)
+        curr_x = int(round((1.0 - t) * top_x + t * base_x))
+        curr_w = int(round((1.0 - t) * top_w + t * base_w))
+        curr_x = max(0, curr_x)
+        curr_w = max(0, curr_w)
+        yy = y + i
+        if 0 <= yy < img_h and curr_w > 0:
+            start = curr_x
+            end = min(img_w, curr_x + curr_w)
+            if start < end:
+                img[yy, start:end] = val
+    return img
+
+
+def draw_disk_approx(img, cx, cy, r, val=1.0):
+    """
+    Draw a filled disk (circle) approximation using a radius check within a bounding box.
+
+    Args:
+        img: Image array to draw on (modified in-place)
+        cx: Center x-coordinate
+        cy: Center y-coordinate
+        r: Radius in pixels
+        val: Intensity value to fill (default: 1.0)
+
+    Returns:
+        numpy.ndarray: The modified image array
+    """
+    radius = max(0, int(r))
+    if radius <= 0:
+        return img
+    img_h, img_w = img.shape
+
+    # Validate center coordinates to prevent overflow
+    cx = max(-radius, min(img_w + radius, cx))
+    cy = max(-radius, min(img_h + radius, cy))
+
+    x0 = max(0, cx - radius)
+    x1 = min(img_w - 1, cx + radius)
+    y0 = max(0, cy - radius)
+    y1 = min(img_h - 1, cy + radius)
+    r2 = radius * radius
+    for yy in range(y0, y1 + 1):
+        dy = yy - cy
+        dy2 = dy * dy
+        # compute span in x using circle equation for efficiency
+        # but simple per-pixel check is fine at this resolution
+        for xx in range(x0, x1 + 1):
+            dx = xx - cx
+            if dx * dx + dy2 <= r2:
+                img[yy, xx] = val
+    return img
+
+
+def draw_line_thick(img, x0, y0, x1, y1, thickness, val=1.0):
+    """
+    Draw a thick line segment between (x0, y0) and (x1, y1) using a distance-to-segment fill.
+
+    Args:
+        img: Image array to draw on (modified in-place)
+        x0, y0: Start point
+        x1, y1: End point
+        thickness: Line thickness in pixels
+        val: Intensity value to fill (default: 1.0)
+
+    Returns:
+        numpy.ndarray: The modified image array
+    """
+    t = max(1, int(thickness))
+    img_h, img_w = img.shape
+
+    # Bounding box expanded by thickness
+    min_x = int(max(0, min(x0, x1) - t))
+    max_x = int(min(img_w - 1, max(x0, x1) + t))
+    min_y = int(max(0, min(y0, y1) - t))
+    max_y = int(min(img_h - 1, max(y0, y1) + t))
+
+    vx = float(x1 - x0)
+    vy = float(y1 - y0)
+    seg_len2 = vx * vx + vy * vy
+    radius = t / 2.0
+    r2 = radius * radius
+
+    for yy in range(min_y, max_y + 1):
+        for xx in range(min_x, max_x + 1):
+            # Pixel center
+            px = xx + 0.5
+            py = yy + 0.5
+            wx = px - x0
+            wy = py - y0
+            if seg_len2 <= 1e-6:
+                # Degenerate: draw a disk at the point
+                dx = px - x0
+                dy = py - y0
+                if dx * dx + dy * dy <= r2:
+                    img[yy, xx] = val
+                continue
+            c1 = wx * vx + wy * vy
+            if c1 <= 0.0:
+                dx = px - x0
+                dy = py - y0
+                dist2 = dx * dx + dy * dy
+            else:
+                if c1 >= seg_len2:
+                    dx = px - x1
+                    dy = py - y1
+                    dist2 = dx * dx + dy * dy
+                else:
+                    b = c1 / seg_len2
+                    proj_x = x0 + b * vx
+                    proj_y = y0 + b * vy
+                    dx = px - proj_x
+                    dy = py - proj_y
+                    dist2 = dx * dx + dy * dy
+            if dist2 <= r2:
+                img[yy, xx] = val
     return img
 
 
@@ -93,23 +238,25 @@ def make_house_scene(size=64, noise=0.05, scale_factor=1.0, position_offset=(0, 
 
     # Draw house body (rectangular walls)
     # Size: 1/3 of canvas dimensions, scaled and positioned with offsets
-    base_width, base_height = int(size//3 * scale_factor), int(size//3 * scale_factor)
+    base_width, base_height = int(size // 3 * scale_factor), int(
+        size // 3 * scale_factor
+    )
     bw, bh = max(6, base_width), max(6, base_height)  # minimum size constraints
-    bx = max(0, min(size - bw, size//2 - bw//2 + position_offset[0]))
-    by = max(0, min(size - bh, size//2 + position_offset[1]))
+    bx = max(0, min(size - bw, size // 2 - bw // 2 + position_offset[0]))
+    by = max(0, min(size - bh, size // 2 + position_offset[1]))
     draw_rect(img, bx, by, bw, bh, 0.7)
 
     # Draw triangular roof above the body
     # Roof spans same width as body, half the height, positioned just above body
-    rx, ry = bx, max(0, by - bh//2)  # align with body left edge, position above body
-    roof_height = max(3, bh//2)  # minimum roof height
+    rx, ry = bx, max(0, by - bh // 2)  # align with body left edge, position above body
+    roof_height = max(3, bh // 2)  # minimum roof height
     if ry >= 0 and rx + bw <= size:  # only draw if roof fits in canvas
         draw_triangle(img, rx, ry, bw, roof_height, 1.0)
 
     # Draw door on the front of the house body
     # Door is small (1/5 body width), tall (half body height), centered on body
-    dw, dh = max(2, bw//5), max(3, bh//2)  # door dimensions relative to body
-    dx = max(bx, min(bx + bw - dw, bx + bw//2 - dw//2))  # center on body
+    dw, dh = max(2, bw // 5), max(3, bh // 2)  # door dimensions relative to body
+    dx = max(bx, min(bx + bw - dw, bx + bw // 2 - dw // 2))  # center on body
     dy = max(by, by + bh - dh)  # align with bottom
     if dx + dw <= size and dy + dh <= size:  # only draw if door fits
         draw_rect(img, dx, dy, dw, dh, 0.9)
@@ -144,14 +291,16 @@ def make_barn_scene(size=64, noise=0.05, scale_factor=1.0, position_offset=(0, 0
     img = canvas(size)
 
     # Draw barn body (wider than house)
-    base_width, base_height = int(size//2 * scale_factor), int(size//3 * scale_factor)
+    base_width, base_height = int(size // 2 * scale_factor), int(
+        size // 3 * scale_factor
+    )
     bw, bh = max(8, base_width), max(6, base_height)
-    bx = max(0, min(size - bw, size//2 - bw//2 + position_offset[0]))
-    by = max(0, min(size - bh, size//2 + position_offset[1]))
+    bx = max(0, min(size - bw, size // 2 - bw // 2 + position_offset[0]))
+    by = max(0, min(size - bh, size // 2 + position_offset[1]))
     draw_rect(img, bx, by, bw, bh, 0.6)
 
     # Draw arched roof (approximated with multiple horizontal rectangles)
-    roof_height = max(4, bh//2)
+    roof_height = max(4, bh // 2)
     ry = max(0, by - roof_height)
     if ry >= 0:
         # Create arch effect with decreasing width rectangles
@@ -164,8 +313,8 @@ def make_barn_scene(size=64, noise=0.05, scale_factor=1.0, position_offset=(0, 0
                     draw_rect(img, arch_x, ry + i, arch_width, 1, 0.8)
 
     # Draw large barn door opening (bigger than house door)
-    dw, dh = max(4, bw//3), max(4, int(bh * 0.7))
-    dx = max(bx, min(bx + bw - dw, bx + bw//2 - dw//2))
+    dw, dh = max(4, bw // 3), max(4, int(bh * 0.7))
+    dx = max(bx, min(bx + bw - dw, bx + bw // 2 - dw // 2))
     dy = max(by, by + bh - dh)
     if dx + dw <= size and dy + dh <= size:
         draw_rect(img, dx, dy, dw, dh, 0.3)  # darker opening
@@ -178,7 +327,7 @@ def make_barn_scene(size=64, noise=0.05, scale_factor=1.0, position_offset=(0, 0
     return img
 
 
-def make_occluded_scene(size=64, noise=0.05, occlusion_type='tree'):
+def make_occluded_scene(size=64, noise=0.05, occlusion_type="tree"):
     """
     Generate a scene with partial occlusion of the main object.
 
@@ -194,7 +343,7 @@ def make_occluded_scene(size=64, noise=0.05, occlusion_type='tree'):
     img = make_house_scene(size, noise=0, scale_factor=0.8)
 
     # Add occlusion based on type
-    if occlusion_type == 'tree':
+    if occlusion_type == "tree":
         # Add a simple tree (vertical line + circle approximation)
         tree_x = size // 4
         tree_height = size // 2
@@ -203,23 +352,23 @@ def make_occluded_scene(size=64, noise=0.05, occlusion_type='tree'):
         draw_rect(img, tree_x - 1, tree_y, 3, tree_height, 0.4)
         # Tree foliage (multiple overlapping rectangles to approximate circle)
         foliage_size = size // 6
-        for i in range(-foliage_size//2, foliage_size//2, 2):
-            for j in range(-foliage_size//2, foliage_size//2, 2):
-                if i*i + j*j < (foliage_size//2)**2:  # rough circle check
+        for i in range(-foliage_size // 2, foliage_size // 2, 2):
+            for j in range(-foliage_size // 2, foliage_size // 2, 2):
+                if i * i + j * j < (foliage_size // 2) ** 2:  # rough circle check
                     fx, fy = tree_x + i, tree_y + j
-                    if 0 <= fx < size-1 and 0 <= fy < size-1:
+                    if 0 <= fx < size - 1 and 0 <= fy < size - 1:
                         draw_rect(img, fx, fy, 2, 2, 0.5)
 
-    elif occlusion_type == 'cloud':
+    elif occlusion_type == "cloud":
         # Add cloud-like occlusion (multiple overlapping ovals)
         cloud_y = size // 6
         for i in range(3):
-            cloud_x = size//4 + i * 8
+            cloud_x = size // 4 + i * 8
             cloud_w, cloud_h = 12, 6
             if cloud_x + cloud_w <= size and cloud_y + cloud_h <= size:
                 draw_rect(img, cloud_x, cloud_y, cloud_w, cloud_h, 0.9)
 
-    elif occlusion_type == 'box':
+    elif occlusion_type == "box":
         # Add rectangular obstruction
         box_size = size // 4
         box_x = 3 * size // 4 - box_size
@@ -235,8 +384,13 @@ def make_occluded_scene(size=64, noise=0.05, occlusion_type='tree'):
     return img
 
 
-def make_varied_scene(scene_type='house', size=64, noise=0.05, 
-                     scale_range=(0.7, 1.3), position_variance=0.2):
+def make_varied_scene(
+    scene_type="house",
+    size=64,
+    noise=0.05,
+    scale_range=(0.7, 1.3),
+    position_variance=0.2,
+):
     """
     Generate a scene with random variations in size and position.
 
@@ -252,26 +406,32 @@ def make_varied_scene(scene_type='house', size=64, noise=0.05,
     """
     # Random scale factor
     scale_factor = np.random.uniform(scale_range[0], scale_range[1])
-    
+
     # Random position offset
     max_offset = int(size * position_variance)
     offset_x = np.random.randint(-max_offset, max_offset + 1)
     offset_y = np.random.randint(-max_offset, max_offset + 1)
-    
-    if scene_type == 'house':
+
+    if scene_type == "house":
         return make_house_scene(size, noise, scale_factor, (offset_x, offset_y))
-    elif scene_type == 'barn':
+    elif scene_type == "barn":
         return make_barn_scene(size, noise, scale_factor, (offset_x, offset_y))
-    elif scene_type == 'occluded':
-        occlusion_types = ['tree', 'cloud', 'box']
+    elif scene_type == "occluded":
+        occlusion_types = ["tree", "cloud", "box"]
         occlusion = np.random.choice(occlusion_types)
         return make_occluded_scene(size, noise, occlusion)
-    elif scene_type == 'church':
+    elif scene_type == "church":
         return make_church_scene(size, noise, scale_factor, (offset_x, offset_y))
-    elif scene_type == 'tent':
+    elif scene_type == "tent":
         return make_tent_scene(size, noise, scale_factor, (offset_x, offset_y))
-    elif scene_type == 'tower':
+    elif scene_type == "tower":
         return make_tower_scene(size, noise, scale_factor, (offset_x, offset_y))
+    elif scene_type == "castle":
+        return make_castle_scene(size, noise, scale_factor, (offset_x, offset_y))
+    elif scene_type == "windmill":
+        return make_windmill_scene(size, noise, scale_factor, (offset_x, offset_y))
+    elif scene_type == "lighthouse":
+        return make_lighthouse_scene(size, noise, scale_factor, (offset_x, offset_y))
     else:
         # Default to house
         return make_house_scene(size, noise, scale_factor, (offset_x, offset_y))
@@ -406,8 +566,210 @@ def make_tower_scene(size=64, noise=0.05, scale_factor=1.0, position_offset=(0, 
     for i in range(num_windows):
         wx = tx + tw // 2 - win_size // 2
         wy = ty + (i + 1) * (th // (num_windows + 1)) - win_size // 2
-        if 0 <= wx < size and 0 <= wy < size and wx + win_size <= size and wy + win_size <= size:
+        if (
+            0 <= wx < size
+            and 0 <= wy < size
+            and wx + win_size <= size
+            and wy + win_size <= size
+        ):
             draw_rect(img, wx, wy, win_size, win_size, 0.9)
+
+    # Noise
+    if noise > 0:
+        img += noise * np.random.randn(*img.shape).astype(np.float32)
+        img = np.clip(img, 0.0, 1.0)
+
+    return img
+
+
+def make_castle_scene(size=64, noise=0.05, scale_factor=1.0, position_offset=(0, 0)):
+    """
+    Generate a synthetic castle scene with wall, crenellations, side towers, and gate.
+
+    Components:
+    - Main wall (0.6)
+    - Crenellations along the top (0.85)
+    - Two side towers (0.65) with small caps (0.8)
+    - Central gate opening (0.3)
+
+    Returns:
+        numpy.ndarray: Generated castle scene as float32 array in [0, 1]
+    """
+    img = canvas(size)
+
+    # Main wall
+    wall_w = max(14, int((size * 0.6) * scale_factor))
+    wall_h = max(10, int((size * 0.28) * scale_factor))
+    wx = max(0, min(size - wall_w, size // 2 - wall_w // 2 + position_offset[0]))
+    wy = max(0, min(size - wall_h, size // 2 + position_offset[1]))
+    draw_rect(img, wx, wy, wall_w, wall_h, 0.6)
+
+    # Crenellations along top of wall
+    tooth_w = max(2, wall_w // 16)
+    tooth_h = max(2, wall_h // 4)
+    gap = max(1, tooth_w // 2)
+    num_teeth = max(3, (wall_w - gap) // (tooth_w + gap))
+    start_x = wx + (wall_w - (num_teeth * (tooth_w + gap) - gap)) // 2
+    y_top = max(0, wy - tooth_h)
+    for i in range(num_teeth):
+        tx = start_x + i * (tooth_w + gap)
+        if 0 <= tx < size and y_top >= 0 and tx + tooth_w <= size:
+            draw_rect(img, tx, y_top, tooth_w, tooth_h, 0.85)
+
+    # Side towers
+    tower_w = max(6, wall_w // 6)
+    tower_h = max(wall_h + tooth_h + 6, int(wall_h * 1.7))
+    # Left tower
+    ltx = max(0, wx - tower_w // 2)
+    lty = max(0, wy + wall_h - tower_h)
+    draw_rect(img, ltx, lty, tower_w, tower_h, 0.65)
+    # Right tower
+    rtx = min(size - tower_w, wx + wall_w - tower_w // 2)
+    rty = max(0, wy + wall_h - tower_h)
+    draw_rect(img, rtx, rty, tower_w, tower_h, 0.65)
+    # Tower caps
+    cap_h = max(2, tower_h // 8)
+    if lty - cap_h >= 0:
+        draw_rect(img, ltx, lty - cap_h, tower_w, cap_h, 0.8)
+    if rty - cap_h >= 0:
+        draw_rect(img, rtx, rty - cap_h, tower_w, cap_h, 0.8)
+
+    # Gate opening (centered on wall bottom)
+    gate_w = max(4, wall_w // 6)
+    gate_h = max(6, int(wall_h * 0.7))
+    gx = wx + wall_w // 2 - gate_w // 2
+    gy = wy + wall_h - gate_h
+    if gx + gate_w <= size and gy + gate_h <= size:
+        draw_rect(img, gx, gy, gate_w, gate_h, 0.3)
+
+    # Noise
+    if noise > 0:
+        img += noise * np.random.randn(*img.shape).astype(np.float32)
+        img = np.clip(img, 0.0, 1.0)
+
+    return img
+
+
+def make_windmill_scene(
+    size=64,
+    noise=0.05,
+    scale_factor=1.0,
+    position_offset=(0, 0),
+    blades=4,
+    blade_angle_deg=None,
+):
+    """
+    Generate a synthetic windmill scene with a tower, roof, hub, and blades.
+
+    Components:
+    - Tower body (0.6)
+    - Roof triangle (0.9)
+    - Circular hub (0.95)
+    - Four blades: horizontal/vertical (rects) and two diagonals (trapezoids) (0.85)
+
+    Returns:
+        numpy.ndarray: Generated windmill scene as float32 array in [0, 1]
+    """
+    img = canvas(size)
+
+    # Tower
+    tw = max(6, int((size * 0.18) * scale_factor))
+    th = max(18, int((size * 0.55) * scale_factor))
+    tx = max(0, min(size - tw, size // 2 - tw // 2 + position_offset[0]))
+    ty = max(0, min(size - th, size // 2 - th // 4 + position_offset[1]))
+    draw_rect(img, tx, ty, tw, th, 0.6)
+
+    # Roof triangle atop tower
+    roof_h = max(4, th // 6)
+    if ty - roof_h >= 0:
+        draw_triangle(img, tx, ty - roof_h, tw, roof_h, 0.9)
+
+    # Hub
+    cx = tx + tw // 2
+    cy = max(0, ty - 1)
+    hub_r = max(2, tw // 4)
+    draw_disk_approx(img, cx, cy, hub_r, 0.95)
+
+    # Blades with arbitrary angle using thick lines
+    blade_len = max(10, int(size * 0.22 * scale_factor))
+    blade_th = max(2, tw // 4)
+    # Determine starting angle
+    if blade_angle_deg is None:
+        blade_angle_deg = float(np.random.uniform(0.0, 360.0))
+    num_blades = max(2, min(8, int(blades)))
+    angle_step = 360.0 / float(num_blades)
+    for b in range(num_blades):
+        ang = np.deg2rad(blade_angle_deg + b * angle_step)
+        dx = int(round(np.cos(ang) * blade_len))
+        dy = int(round(np.sin(ang) * blade_len))
+        x1 = int(cx + dx)
+        y1 = int(cy + dy)
+        x0 = int(cx - dx * 0.15)
+        y0 = int(cy - dy * 0.15)
+        draw_line_thick(img, x0, y0, x1, y1, blade_th, 0.85)
+
+    # Noise
+    if noise > 0:
+        img += noise * np.random.randn(*img.shape).astype(np.float32)
+        img = np.clip(img, 0.0, 1.0)
+
+    return img
+
+
+def make_lighthouse_scene(
+    size=64, noise=0.05, scale_factor=1.0, position_offset=(0, 0), beam_angle_deg=0.0
+):
+    """
+    Generate a synthetic lighthouse with striped body, top cap, and light beam.
+
+    Components:
+    - Striped body (alternating 0.6/0.8)
+    - Lantern room/top cap (0.9)
+    - Light beam as a slanted trapezoid (1.0 -> clipped)
+
+    Returns:
+        numpy.ndarray: Generated lighthouse scene as float32 array in [0, 1]
+    """
+    img = canvas(size)
+
+    # Body
+    bw = max(7, int((size * 0.16) * scale_factor))
+    bh = max(26, int((size * 0.65) * scale_factor))
+    bx = max(0, min(size - bw, size // 3 - bw // 2 + position_offset[0]))
+    by = max(0, min(size - bh, size // 2 - bh // 3 + position_offset[1]))
+
+    # Draw stripes
+    stripe_h = max(3, bh // 8)
+    stripes = max(4, bh // stripe_h)
+    for i in range(stripes):
+        sy = by + i * stripe_h
+        if sy >= by + bh:
+            break
+        h = min(stripe_h, by + bh - sy)
+        val = 0.6 if i % 2 == 0 else 0.8
+        draw_rect(img, bx, sy, bw, h, val)
+
+    # Lantern room/top cap
+    cap_h = max(3, bh // 10)
+    cap_y = max(0, by - cap_h)
+    draw_rect(img, bx, cap_y, bw, cap_h, 0.9)
+
+    # Light beam: angled thick line emanating from lantern center
+    beam_center_x = bx + bw
+    beam_center_y = cap_y + cap_h // 2
+    beam_len = int(size * 0.45)
+    beam_th = max(3, bw // 2)
+    ang = np.deg2rad(beam_angle_deg)
+    x1 = int(round(beam_center_x + np.cos(ang) * beam_len))
+    y1 = int(round(beam_center_y + np.sin(ang) * beam_len))
+    draw_line_thick(img, beam_center_x, beam_center_y, x1, y1, beam_th, 1.0)
+
+    # Small door at bottom
+    dw = max(3, bw // 3)
+    dh = max(5, bh // 6)
+    dx = bx + bw // 2 - dw // 2
+    dy = by + bh - dh
+    draw_rect(img, dx, dy, dw, dh, 0.3)
 
     # Noise
     if noise > 0:

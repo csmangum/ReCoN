@@ -94,12 +94,14 @@ Each simulation time step consists of four phases:
 delta = self._propagate()
 ```
 
-The **compact arithmetic propagation** computes how activation flows through each link type using **per-gate functions**:
+The **compact arithmetic propagation** computes how activation flows through each link type using **per-gate functions**. This implementation chooses concrete defaults (configurable) that reflect the qualitative behavior described in the paper:
 
-- **SUB Gate**: `TRUE/CONFIRMED` = +1.0 (positive evidence), `FAILED` = -1.0 (negative evidence)
-- **SUR Gate**: `REQUESTED/ACTIVE` = +0.3 (request signal), `FAILED` = -0.3 (inhibition)
-- **POR Gate**: `CONFIRMED` = +0.5 (enable successor), `FAILED` = -0.5 (inhibit successor)
-- **RET Gate**: `FAILED` = -0.5 (failure feedback), `CONFIRMED` = +0.2 (success feedback)
+- **SUB Gate**: `TRUE/CONFIRMED` → +1.0, `FAILED` → -1.0
+- **SUR Gate**: `REQUESTED/ACTIVE` → +0.3, `FAILED` → -0.3
+- **POR Gate**: `CONFIRMED` → +0.5, `FAILED` → -0.5
+- **RET Gate**: `FAILED` → -0.5, `CONFIRMED` → +0.2
+
+All values are configurable via `EngineConfig` to support experiments.
 
 #### 2. State Update Phase
 ```python
@@ -187,6 +189,17 @@ Implementation notes:
 
 - SUR requests to children are issued once per parent script activation episode to avoid over-counting.
 - Timing fields record the first step at which the state transition occurred and remain stable thereafter.
+
+### Optional Propagation Thresholds
+
+For additional control over when gates emit signals, `EngineConfig` exposes per-link minimal source activation thresholds. When set above 0, a gate output is suppressed unless the source unit's activation `a` meets the threshold:
+
+- `sub_min_source_activation`
+- `sur_min_source_activation`
+- `por_min_source_activation`
+- `ret_min_source_activation`
+
+Defaults are 0.0 to preserve paper-faithful behavior; set higher to require stronger source activation before propagating.
 
 ### Key Classes
 

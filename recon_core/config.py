@@ -46,3 +46,11 @@ class EngineConfig:
     # When enabled, a FAILED successor can demote a CONFIRMED predecessor to ACTIVE
     # via RET links; a CONFIRMED successor can stabilize predecessor (no-op here).
     ret_feedback_enabled: bool = False
+
+    # Optional per-link-type minimal source activation thresholds for propagation.
+    # If set > 0, gate outputs for that link type are suppressed unless the source
+    # unit's activation is at least the specified value. Defaults preserve behavior.
+    sub_min_source_activation: float = 0.0
+    sur_min_source_activation: float = 0.0
+    por_min_source_activation: float = 0.0
+    ret_min_source_activation: float = 0.0
