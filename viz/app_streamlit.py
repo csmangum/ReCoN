@@ -89,7 +89,11 @@ class ReCoNSimulation:
             g.add_unit(Unit(init_unit_id, UnitType.SCRIPT, state=State.INACTIVE, a=0.0))
         # initial minimal terminals (will be rebuilt dynamically on Generate Scene)
         for term_id in ["t_mean", "t_vert", "t_horz"]:
-            g.add_unit(Unit(term_id, UnitType.TERMINAL, state=State.INACTIVE, a=0.0, thresh=0.5))
+            g.add_unit(
+                Unit(
+                    term_id, UnitType.TERMINAL, state=State.INACTIVE, a=0.0, thresh=0.5
+                )
+            )
         # hierarchy: terminals -> scripts via SUB; parent -> child via SUR
         g.add_edge(Edge("t_horz", "u_roof", LinkType.SUB, w=1.0))
         g.add_edge(Edge("t_mean", "u_body", LinkType.SUB, w=1.0))
@@ -107,7 +111,9 @@ class ReCoNSimulation:
 
     def _remove_existing_terminals(self):
         """Remove all existing TERMINAL units and associated edges."""
-        terminal_ids = [uid for uid, u in self.graph.units.items() if u.kind == UnitType.TERMINAL]
+        terminal_ids = [
+            uid for uid, u in self.graph.units.items() if u.kind == UnitType.TERMINAL
+        ]
         if not terminal_ids:
             return
         # Remove edges touching terminals
@@ -117,11 +123,19 @@ class ReCoNSimulation:
 
         # Remove outgoing edges from non-terminal nodes that connect to terminals
         for src_id, edges in list(self.graph.out_edges.items()):
-            self.graph.out_edges[src_id] = [e for e in edges if e.src not in terminal_set and e.dst not in terminal_set]
+            self.graph.out_edges[src_id] = [
+                e
+                for e in edges
+                if e.src not in terminal_set and e.dst not in terminal_set
+            ]
 
         # Remove incoming edges to non-terminal nodes that originate from terminals
         for dst_id, edges in list(self.graph.in_edges.items()):
-            self.graph.in_edges[dst_id] = [e for e in edges if e.src not in terminal_set and e.dst not in terminal_set]
+            self.graph.in_edges[dst_id] = [
+                e
+                for e in edges
+                if e.src not in terminal_set and e.dst not in terminal_set
+            ]
         # Remove terminal units
         for tid in terminal_ids:
             self.graph.units.pop(tid, None)
@@ -138,14 +152,20 @@ class ReCoNSimulation:
             return "u_body"
         if any(k in lid for k in ["door"]):
             return "u_door"
-        if any(k in lid for k in ["rect", "texture", "contrast", "n_shape", "aspect", "compact"]):
+        if any(
+            k in lid
+            for k in ["rect", "texture", "contrast", "n_shape", "aspect", "compact"]
+        ):
             return "u_body"
-        if any(k in lid for k in ["corner", "edge", "orient", "triangle", "vsym", "line_aniso"]):
+        if any(
+            k in lid
+            for k in ["corner", "edge", "orient", "triangle", "vsym", "line_aniso"]
+        ):
             return "u_roof"
         if lid.startswith("t_ae_") or lid.startswith("t_cnn_"):
             try:
                 idx = int(lid.split("_")[-1])
-            except Exception:
+            except ValueError:
                 idx = 0
             return ["u_roof", "u_body", "u_door"][idx % 3]
         return "u_body"
@@ -153,7 +173,11 @@ class ReCoNSimulation:
     def _rebuild_terminals(self, terminals: dict):
         self._remove_existing_terminals()
         for term_id, _ in terminals.items():
-            self.graph.add_unit(Unit(term_id, UnitType.TERMINAL, state=State.INACTIVE, a=0.0, thresh=0.5))
+            self.graph.add_unit(
+                Unit(
+                    term_id, UnitType.TERMINAL, state=State.INACTIVE, a=0.0, thresh=0.5
+                )
+            )
             parent = self._choose_parent_for_terminal(term_id)
             self.graph.add_edge(Edge(term_id, parent, LinkType.SUB, w=1.0))
             if term_id == "t_mean":
@@ -282,18 +306,30 @@ with st.sidebar:
     with st.expander("Training (AE/CNN)"):
         col_train_ae, col_train_cnn = st.columns(2)
         with col_train_ae:
-            ae_epochs = st.number_input("AE epochs", min_value=1, max_value=200, value=10, step=1)
+            ae_epochs = st.number_input(
+                "AE epochs", min_value=1, max_value=200, value=10, step=1
+            )
             if st.button("Train AE", use_container_width=True):
-                os.environ["RECON_TRAIN_AE_EPOCHS"] = str(int(ae_epochs))
-                # Force retrain regardless of env gate
-                _ = get_autoencoder(retrain=True)
-                st.success("Autoencoder trained and cached.")
+                # Validate epochs value before setting environment variable
+                if isinstance(ae_epochs, (int, float)) and 1 <= ae_epochs <= 200:
+                    os.environ["RECON_TRAIN_AE_EPOCHS"] = str(int(ae_epochs))
+                    # Force retrain regardless of env gate
+                    _ = get_autoencoder(retrain=True)
+                    st.success("Autoencoder trained and cached.")
+                else:
+                    st.error("Epochs value must be an integer between 1 and 200.")
         with col_train_cnn:
-            cnn_epochs = st.number_input("CNN epochs", min_value=1, max_value=200, value=5, step=1)
+            cnn_epochs = st.number_input(
+                "CNN epochs", min_value=1, max_value=200, value=5, step=1
+            )
             if st.button("Train CNN", use_container_width=True):
-                os.environ["RECON_TRAIN_CNN_EPOCHS"] = str(int(cnn_epochs))
-                _ = get_cnn(retrain=True)
-                st.success("TinyCNN trained and cached.")
+                # Validate epochs value before setting environment variable
+                if isinstance(cnn_epochs, (int, float)) and 1 <= cnn_epochs <= 200:
+                    os.environ["RECON_TRAIN_CNN_EPOCHS"] = str(int(cnn_epochs))
+                    _ = get_cnn(retrain=True)
+                    st.success("TinyCNN trained and cached.")
+                else:
+                    st.error("Epochs value must be an integer between 1 and 200.")
 
     col_scene_gen, col_scene_reset = st.columns(2)
     with col_scene_gen:
@@ -347,7 +383,9 @@ with st.sidebar:
         current_snap = st.session_state.sim.history[0]
     else:
         timeline_idx = 0
-        current_snap = st.session_state.get("snap", st.session_state.sim.engine.snapshot())
+        current_snap = st.session_state.get(
+            "snap", st.session_state.sim.engine.snapshot()
+        )
 
     st.divider()
 
@@ -502,7 +540,11 @@ with col_graph:
         "u_door": (1, 1),
     }
     # Place terminal nodes evenly across top row
-    terminal_nodes = [n for n, d in st.session_state.sim.graph.units.items() if d.kind == UnitType.TERMINAL]
+    terminal_nodes = [
+        n
+        for n, d in st.session_state.sim.graph.units.items()
+        if d.kind == UnitType.TERMINAL
+    ]
     if terminal_nodes:
         xs = np.linspace(-1.5, 1.5, num=len(terminal_nodes))
         for x, n in zip(xs, terminal_nodes):
