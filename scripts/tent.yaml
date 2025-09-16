@@ -1,0 +1,12 @@
+object: tent
+children:
+  - id: body
+    type: AND
+    parts: [t_triangle, t_horz]
+  - id: entrance
+    type: OR
+    parts: [t_mean, t_vert]
+sequence:
+  - body
+  - entrance
+
