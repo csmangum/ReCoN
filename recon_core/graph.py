@@ -330,24 +330,28 @@ class Graph:
             # Get successors for this link type
             successors = []
             if link_type == LinkType.SUB:
+                # SUB links flow from child to parent (evidence propagation)
                 successors = [
                     e.dst
                     for e in self.out_edges.get(node_id, [])
                     if e.type == link_type
                 ]
             elif link_type == LinkType.SUR:
+                # SUR links flow from parent to child (request propagation)
                 successors = [
                     e.dst
                     for e in self.out_edges.get(node_id, [])
                     if e.type == link_type
                 ]
             elif link_type == LinkType.POR:
+                # POR links flow from predecessor to successor (temporal ordering)
                 successors = [
                     e.dst
                     for e in self.out_edges.get(node_id, [])
                     if e.type == link_type
                 ]
             elif link_type == LinkType.RET:
+                # RET links flow from successor to predecessor (temporal feedback)
                 successors = [
                     e.dst
                     for e in self.out_edges.get(node_id, [])
@@ -610,7 +614,7 @@ class Graph:
                     f"Terminal '{term_id}' has invalid incoming links: {invalid_incoming}"
                 )
 
-            # Terminals should have at least one parent script
+            # Terminals should have at least one parent script (SUB link = evidence flow upward)
             has_parent = any(
                 e.type == LinkType.SUB for e in self.out_edges.get(term_id, [])
             )
@@ -619,12 +623,14 @@ class Graph:
                     f"Terminal '{term_id}' has no parent script (missing SUB link)"
                 )
 
-        # Check script hierarchy
+        # Check script hierarchy and link directionality
+        # In ReCoN design: SUB = evidence flow (terminals → scripts), SUR = request flow (scripts → terminals)
         for script_id in scripts:
             outgoing_types = {e.type for e in self.out_edges.get(script_id, [])}
             incoming_types = {e.type for e in self.in_edges.get(script_id, [])}
 
-            # Check for inappropriate SUB link targets (scripts should only send SUB links to other scripts, not terminals)
+            # SUB links should flow UPWARD (evidence from terminals to scripts)
+            # Scripts should receive SUB links (evidence), not send them to terminals
             for edge in self.out_edges.get(script_id, []):
                 if edge.type == LinkType.SUB:
                     target_unit = self.units.get(edge.dst)
@@ -633,7 +639,8 @@ class Graph:
                             f"Script '{script_id}' sends SUB link to terminal '{edge.dst}' - scripts should receive SUB links from terminals"
                         )
 
-            # Check for inappropriate SUR link sources (scripts should only receive SUR links from other scripts, not terminals)
+            # SUR links should flow DOWNWARD (requests from scripts to terminals)
+            # Scripts should send SUR links (requests), not receive them from terminals
             for edge in self.in_edges.get(script_id, []):
                 if edge.type == LinkType.SUR:
                     source_unit = self.units.get(edge.src)
@@ -1101,7 +1108,13 @@ class Graph:
                     rule_result = validation_func(self)
                     if rule_result:  # Only include rules that found issues
                         results[rule_name] = rule_result
-                except (AttributeError, ValueError, TypeError, KeyError, RuntimeError) as e:
+                except (
+                    AttributeError,
+                    ValueError,
+                    TypeError,
+                    KeyError,
+                    RuntimeError,
+                ) as e:
                     results[rule_name] = {
                         "execution_errors": [
                             f"Error running custom rule '{rule_name}': {str(e)}"
