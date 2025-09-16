@@ -19,8 +19,6 @@ The ReCoN algorithm operates in discrete time steps with four phases:
 4. Second Message Processing: Process newly delivered messages in the same step
 """
 
-from __future__ import annotations
-
 from typing import Dict
 
 from .config import EngineConfig
@@ -459,14 +457,67 @@ class Engine:
         Returns:
             dict: Snapshot of the network state after stepping
         """
-        for _ in range(n):
+        print("Starting " + str(n) + " simulation step(s) at time t=" + str(self.t))
+        for step_num in range(n):
+            print(
+                "Step "
+                + str(step_num + 1)
+                + "/"
+                + str(n)
+                + ": Starting propagation phase"
+            )
             delta = self._propagate()
+            print(
+                "Step "
+                + str(step_num + 1)
+                + "/"
+                + str(n)
+                + ": Propagation complete, starting state update phase"
+            )
             self._update_states(delta)
+            print(
+                "Step "
+                + str(step_num + 1)
+                + "/"
+                + str(n)
+                + ": State update complete, starting message delivery phase"
+            )
             self._deliver_messages()  # deliver messages after state updates
+            print(
+                "Step "
+                + str(step_num + 1)
+                + "/"
+                + str(n)
+                + ": Message delivery complete, starting second message processing phase"
+            )
             # Process newly delivered messages in the same step
+            unit_count = len(self._get_unit_ids())
+            print(
+                "Step "
+                + str(step_num + 1)
+                + "/"
+                + str(n)
+                + ": Processing messages for "
+                + str(unit_count)
+                + " units"
+            )
             for uid in self._get_unit_ids():
                 self._process_messages(uid)
             self.t += 1
+            print(
+                "Step "
+                + str(step_num + 1)
+                + "/"
+                + str(n)
+                + ": Complete. Time advanced to t="
+                + str(self.t)
+            )
+        print(
+            "All "
+            + str(n)
+            + " simulation step(s) completed. Final time: t="
+            + str(self.t)
+        )
         return self.snapshot()
 
     def snapshot(self):
