@@ -46,6 +46,11 @@ from manim import (
     config,
     LEFT,
     DOWN,
+    UP,
+    Rectangle,
+    Arc,
+    PI,
+    rate_functions as rf,
 )
 
 # Ensure project root import for recon_core and perception
@@ -123,6 +128,7 @@ class NodeViz:
         self.text = Text(label, font_size=26)
         self.group = VGroup(self.circle, self.text)
         self.text.move_to(self.circle.get_center())
+        self.meter = None  # activation meter arc
 
     def move_to(self, pt):
         self.group.move_to(pt)
@@ -145,6 +151,29 @@ class NodeViz:
 
     def mobject(self) -> Mobject:
         return self.group
+
+    def set_activation_meter(self, activation: float, color=WHITE):
+        # Remove previous meter if any
+        if self.meter is not None:
+            try:
+                self.group.remove(self.meter)
+            except Exception:
+                pass
+        a = float(max(0.0, min(1.0, activation)))
+        if a <= 0.0:
+            self.meter = None
+            return self
+        arc = Arc(
+            start_angle=-PI / 2,
+            angle=2 * PI * a,
+            radius=self.radius + 0.42,
+            color=color,
+            stroke_width=4,
+        )
+        arc.move_to(self.circle.get_center())
+        self.meter = arc
+        self.group.add(self.meter)
+        return self
 
 
 def edge_arrow(src: NodeViz, dst: NodeViz, color=WHITE, dashed=False) -> Mobject:
@@ -200,10 +229,11 @@ class HouseWalkthrough(Scene):
         for uid, pos in node_positions.items():
             n = NodeViz(uid).move_to(pos)
             n.set_fill_state(g.units[uid].state.name)
+            n.set_activation_meter(g.units[uid].a, color=YELLOW)
             nodes[uid] = n
 
         node_group = Group(*[n.mobject() for n in nodes.values()])
-        self.play(Create(node_group))
+        self.play(Create(node_group), run_time=1.0, rate_func=rf.ease_in_out_sine)
 
         # Edges (style-coded): SUB=GREEN, SUR=RED, POR=YELLOW (dashed)
         edges: List[Mobject] = []
@@ -224,7 +254,7 @@ class HouseWalkthrough(Scene):
                 else:
                     mob = edge_arrow(nodes[src_id], nodes[e.dst], color=ORANGE, dashed=True)
                 edges.append(mob)
-        self.play(*[FadeIn(m) for m in edges], lag_ratio=0.02)
+        self.play(*[FadeIn(m) for m in edges], lag_ratio=0.02, run_time=0.8)
 
         # 3) Show initial terminal activations as small rings
         rings: List[Mobject] = []
@@ -233,7 +263,7 @@ class HouseWalkthrough(Scene):
             ring = Circle(radius=0.18 + 0.18 * np.clip(val, 0.0, 1.0), color=GREEN)
             ring.move_to(nodes[tid].circle.get_center())
             rings.append(ring)
-        self.play(*[FadeIn(r) for r in rings])
+        self.play(*[FadeIn(r) for r in rings], run_time=0.6)
 
         # Legend
         legend_items = VGroup(
@@ -244,12 +274,12 @@ class HouseWalkthrough(Scene):
         ).arrange(direction="down", aligned_edge="left", buff=0.12)
         legend_items.scale(0.9)
         legend_items.to_corner(DOWN + LEFT).shift([0.4, 0.3, 0])
-        self.play(FadeIn(legend_items))
+        self.play(FadeIn(legend_items), run_time=0.4)
 
         # Timeline label
         t_label = Text("t=0", font_size=26)
         t_label.to_corner(DOWN).shift([0, 0.2, 0])
-        self.play(FadeIn(t_label))
+        self.play(FadeIn(t_label), run_time=0.4)
 
         # State color helper and animated update
         def state_color(name: str):
@@ -271,22 +301,26 @@ class HouseWalkthrough(Scene):
                 if uid not in nodes:
                     continue
                 target = state_color(data["state"])
-                anims.append(nodes[uid].circle.animate.set_fill(target, opacity=0.25))
+                anims.append(
+                    nodes[uid].circle.animate.set_fill(target, opacity=0.25)
+                )
+                # activation meter tween
+                nodes[uid].set_activation_meter(data.get("a", 0.0), color=YELLOW)
             if anims:
-                self.play(*anims, lag_ratio=0.02)
+                self.play(*anims, lag_ratio=0.02, run_time=0.6, rate_func=rf.ease_out_sine)
 
         # Labels for phases
         phase_text = Text("Top-down requests (SUR)", font_size=28, color=RED).to_edge(
             DOWN
         )
-        self.play(FadeIn(phase_text))
+        self.play(FadeIn(phase_text), run_time=0.4)
         # Pulse SUR edges
         sur_pulses = []
         for s, d in sur_edges:
             pulse = edge_arrow(nodes[s], nodes[d], color=RED)
             sur_pulses.append(pulse)
-        self.play(*[FadeIn(p) for p in sur_pulses], lag_ratio=0.01)
-        self.play(*[FadeOut(p) for p in sur_pulses], lag_ratio=0.01)
+        self.play(*[FadeIn(p) for p in sur_pulses], lag_ratio=0.02, run_time=0.4)
+        self.play(*[FadeOut(p) for p in sur_pulses], lag_ratio=0.02, run_time=0.4)
         snap1 = engine.step(1)  # Requests fan out
         animate_node_state_changes(snap1)
         t_label_new = Text("t=1", font_size=26).to_corner(DOWN).shift([0, 0.2, 0])
@@ -294,19 +328,19 @@ class HouseWalkthrough(Scene):
         t_label = t_label_new
         self.wait(0.6)
 
-        self.play(FadeOut(phase_text))
+        self.play(FadeOut(phase_text), run_time=0.3)
         phase_text = Text("Terminal confirmations (SUB)", font_size=28, color=GREEN).to_edge(
             DOWN
         )
-        self.play(FadeIn(phase_text))
+        self.play(FadeIn(phase_text), run_time=0.4)
         # Pulse SUB edges from terminals
         sub_pulses = []
         for s, d in sub_edges:
             if g.units[s].kind == UnitType.TERMINAL:
                 pulse = edge_arrow(nodes[s], nodes[d], color=GREEN)
                 sub_pulses.append(pulse)
-        self.play(*[FadeIn(p) for p in sub_pulses], lag_ratio=0.01)
-        self.play(*[FadeOut(p) for p in sub_pulses], lag_ratio=0.01)
+        self.play(*[FadeIn(p) for p in sub_pulses], lag_ratio=0.02, run_time=0.4)
+        self.play(*[FadeOut(p) for p in sub_pulses], lag_ratio=0.02, run_time=0.4)
         snap2 = engine.step(1)
         animate_node_state_changes(snap2)
         t_label_new = Text("t=2", font_size=26).to_corner(DOWN).shift([0, 0.2, 0])
@@ -314,15 +348,15 @@ class HouseWalkthrough(Scene):
         t_label = t_label_new
         self.wait(0.6)
 
-        self.play(FadeOut(phase_text))
+        self.play(FadeOut(phase_text), run_time=0.3)
         phase_text = Text("Temporal sequencing (POR)", font_size=28, color=YELLOW).to_edge(
             DOWN
         )
-        self.play(FadeIn(phase_text))
+        self.play(FadeIn(phase_text), run_time=0.4)
         # Pulse POR edges
         por_pulses = [edge_arrow(nodes[s], nodes[d], color=YELLOW) for s, d in por_edges]
-        self.play(*[FadeIn(p) for p in por_pulses], lag_ratio=0.02)
-        self.play(*[FadeOut(p) for p in por_pulses], lag_ratio=0.02)
+        self.play(*[FadeIn(p) for p in por_pulses], lag_ratio=0.02, run_time=0.4)
+        self.play(*[FadeOut(p) for p in por_pulses], lag_ratio=0.02, run_time=0.4)
         snap3 = engine.step(1)
         animate_node_state_changes(snap3)
         t_label_new = Text("t=3", font_size=26).to_corner(DOWN).shift([0, 0.2, 0])
@@ -330,9 +364,9 @@ class HouseWalkthrough(Scene):
         t_label = t_label_new
         self.wait(0.6)
 
-        self.play(FadeOut(phase_text))
+        self.play(FadeOut(phase_text), run_time=0.3)
         phase_text = Text("Root confirmation", font_size=28, color=TEAL).to_edge(DOWN)
-        self.play(FadeIn(phase_text))
+        self.play(FadeIn(phase_text), run_time=0.4)
         snap4 = engine.step(1)
         animate_node_state_changes(snap4)
         t_label_new = Text("t=4", font_size=26).to_corner(DOWN).shift([0, 0.2, 0])
@@ -340,22 +374,22 @@ class HouseWalkthrough(Scene):
         t_label = t_label_new
         self.wait(0.8)
 
-        self.play(FadeOut(phase_text))
+        self.play(FadeOut(phase_text), run_time=0.3)
 
         # Subtle outro highlight on CONFIRMED nodes
         confirmed = [uid for uid, u in g.units.items() if u.state == State.CONFIRMED]
         if confirmed:
             highlights = [nodes[uid].circle.copy().set_stroke(GREEN, width=6) for uid in confirmed]
-            self.play(*[FadeIn(h) for h in highlights])
-            self.wait(0.6)
-            self.play(*[FadeOut(h) for h in highlights])
+            self.play(*[FadeIn(h) for h in highlights], run_time=0.5)
+            self.wait(0.4)
+            self.play(*[FadeOut(h) for h in highlights], run_time=0.5)
 
         # Final slate
         final = Text("Confirmed: roof, body, door → house", font_size=30)
         final_bg = final.add_background_rectangle(opacity=0.15, buff=0.2)
         final_bg.move_to([right_x, y_root - 3.5, 0])
-        self.play(FadeIn(final_bg))
-        self.wait(1.2)
+        self.play(FadeIn(final_bg), run_time=0.5)
+        self.wait(1.0)
 
 
 # README (rendering notes):
