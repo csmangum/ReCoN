@@ -1,4 +1,4 @@
-"""
+THIS SHOULD BE A LINTER ERROR"""
 Manim Community animation: Step-by-step ReCoN activation on the synthetic house scene.
 
 This script renders a clean, polished walkthrough of the ReCoN network during
@@ -45,6 +45,7 @@ from manim import (
     VGroup,
     config,
     LEFT,
+    DOWN,
 )
 
 # Ensure project root import for recon_core and perception
@@ -166,14 +167,15 @@ class HouseWalkthrough(Scene):
         # Normalize to 0..255 grayscale
         pil_arr = (np.clip(img, 0.0, 1.0) * 255).astype(np.uint8)
         house = ImageMobject(pil_arr).scale(2.8)
-        house.to_edge(left)
+        house.to_edge(LEFT)
 
-        title = Text("ReCoN: Active Perception on a House", font_size=36)
-        subtitle = Text("Step-by-step activation & messaging", font_size=24).next_to(
-            title, DOWN
-        )
+        # Title card
+        title = Text("Request Confirmation Network", font_size=40)
+        subtitle = Text("Active Perception on a Synthetic House", font_size=28)
+        subtitle.next_to(title, DOWN)
         self.play(FadeIn(title), FadeIn(subtitle))
-        self.wait(0.4)
+        self.wait(0.6)
+        self.play(FadeOut(title), FadeOut(subtitle))
         self.play(FadeIn(house))
 
         # 2) Build network viz on the right
@@ -205,14 +207,20 @@ class HouseWalkthrough(Scene):
 
         # Edges (style-coded): SUB=GREEN, SUR=RED, POR=YELLOW (dashed)
         edges: List[Mobject] = []
+        sur_edges: List[Tuple[str, str]] = []
+        sub_edges: List[Tuple[str, str]] = []
+        por_edges: List[Tuple[str, str]] = []
         for src_id, out_edges in g.out_edges.items():
             for e in out_edges:
                 if e.type == LinkType.SUB:
                     mob = edge_arrow(nodes[src_id], nodes[e.dst], color=GREEN)
+                    sub_edges.append((src_id, e.dst))
                 elif e.type == LinkType.SUR:
                     mob = edge_arrow(nodes[src_id], nodes[e.dst], color=RED)
+                    sur_edges.append((src_id, e.dst))
                 elif e.type == LinkType.POR:
                     mob = edge_arrow(nodes[src_id], nodes[e.dst], color=YELLOW, dashed=True)
+                    por_edges.append((src_id, e.dst))
                 else:
                     mob = edge_arrow(nodes[src_id], nodes[e.dst], color=ORANGE, dashed=True)
                 edges.append(mob)
@@ -227,20 +235,63 @@ class HouseWalkthrough(Scene):
             rings.append(ring)
         self.play(*[FadeIn(r) for r in rings])
 
-        # 4) Step through engine updates and animate state changes
-        def update_node_states(snap: dict):
+        # Legend
+        legend_items = VGroup(
+            Text("Links:", font_size=20),
+            Text("SUR (request)", font_size=18).set_color(RED),
+            Text("SUB (evidence)", font_size=18).set_color(GREEN),
+            Text("POR (sequence)", font_size=18).set_color(YELLOW),
+        ).arrange(direction="down", aligned_edge="left", buff=0.12)
+        legend_items.scale(0.9)
+        legend_items.to_corner(DOWN + LEFT).shift([0.4, 0.3, 0])
+        self.play(FadeIn(legend_items))
+
+        # Timeline label
+        t_label = Text("t=0", font_size=26)
+        t_label.to_corner(DOWN).shift([0, 0.2, 0])
+        self.play(FadeIn(t_label))
+
+        # State color helper and animated update
+        def state_color(name: str):
+            mapping = {
+                "INACTIVE": GREY_B,
+                "REQUESTED": BLUE,
+                "WAITING": ORANGE,
+                "ACTIVE": TEAL,
+                "TRUE": GREEN,
+                "CONFIRMED": GREEN,
+                "FAILED": RED,
+                "SUPPRESSED": RED,
+            }
+            return mapping.get(name, WHITE)
+
+        def animate_node_state_changes(snap: dict):
+            anims = []
             for uid, data in snap["units"].items():
                 if uid not in nodes:
                     continue
-                nodes[uid].set_fill_state(data["state"])
+                target = state_color(data["state"])
+                anims.append(nodes[uid].circle.animate.set_fill(target, opacity=0.25))
+            if anims:
+                self.play(*anims, lag_ratio=0.02)
 
         # Labels for phases
         phase_text = Text("Top-down requests (SUR)", font_size=28, color=RED).to_edge(
             DOWN
         )
         self.play(FadeIn(phase_text))
+        # Pulse SUR edges
+        sur_pulses = []
+        for s, d in sur_edges:
+            pulse = edge_arrow(nodes[s], nodes[d], color=RED)
+            sur_pulses.append(pulse)
+        self.play(*[FadeIn(p) for p in sur_pulses], lag_ratio=0.01)
+        self.play(*[FadeOut(p) for p in sur_pulses], lag_ratio=0.01)
         snap1 = engine.step(1)  # Requests fan out
-        update_node_states(snap1)
+        animate_node_state_changes(snap1)
+        t_label_new = Text("t=1", font_size=26).to_corner(DOWN).shift([0, 0.2, 0])
+        self.play(FadeOut(t_label), FadeIn(t_label_new))
+        t_label = t_label_new
         self.wait(0.6)
 
         self.play(FadeOut(phase_text))
@@ -248,8 +299,19 @@ class HouseWalkthrough(Scene):
             DOWN
         )
         self.play(FadeIn(phase_text))
+        # Pulse SUB edges from terminals
+        sub_pulses = []
+        for s, d in sub_edges:
+            if g.units[s].kind == UnitType.TERMINAL:
+                pulse = edge_arrow(nodes[s], nodes[d], color=GREEN)
+                sub_pulses.append(pulse)
+        self.play(*[FadeIn(p) for p in sub_pulses], lag_ratio=0.01)
+        self.play(*[FadeOut(p) for p in sub_pulses], lag_ratio=0.01)
         snap2 = engine.step(1)
-        update_node_states(snap2)
+        animate_node_state_changes(snap2)
+        t_label_new = Text("t=2", font_size=26).to_corner(DOWN).shift([0, 0.2, 0])
+        self.play(FadeOut(t_label), FadeIn(t_label_new))
+        t_label = t_label_new
         self.wait(0.6)
 
         self.play(FadeOut(phase_text))
@@ -257,15 +319,25 @@ class HouseWalkthrough(Scene):
             DOWN
         )
         self.play(FadeIn(phase_text))
+        # Pulse POR edges
+        por_pulses = [edge_arrow(nodes[s], nodes[d], color=YELLOW) for s, d in por_edges]
+        self.play(*[FadeIn(p) for p in por_pulses], lag_ratio=0.02)
+        self.play(*[FadeOut(p) for p in por_pulses], lag_ratio=0.02)
         snap3 = engine.step(1)
-        update_node_states(snap3)
+        animate_node_state_changes(snap3)
+        t_label_new = Text("t=3", font_size=26).to_corner(DOWN).shift([0, 0.2, 0])
+        self.play(FadeOut(t_label), FadeIn(t_label_new))
+        t_label = t_label_new
         self.wait(0.6)
 
         self.play(FadeOut(phase_text))
         phase_text = Text("Root confirmation", font_size=28, color=TEAL).to_edge(DOWN)
         self.play(FadeIn(phase_text))
         snap4 = engine.step(1)
-        update_node_states(snap4)
+        animate_node_state_changes(snap4)
+        t_label_new = Text("t=4", font_size=26).to_corner(DOWN).shift([0, 0.2, 0])
+        self.play(FadeOut(t_label), FadeIn(t_label_new))
+        t_label = t_label_new
         self.wait(0.8)
 
         self.play(FadeOut(phase_text))
@@ -277,6 +349,13 @@ class HouseWalkthrough(Scene):
             self.play(*[FadeIn(h) for h in highlights])
             self.wait(0.6)
             self.play(*[FadeOut(h) for h in highlights])
+
+        # Final slate
+        final = Text("Confirmed: roof, body, door → house", font_size=30)
+        final_bg = final.add_background_rectangle(opacity=0.15, buff=0.2)
+        final_bg.move_to([right_x, y_root - 3.5, 0])
+        self.play(FadeIn(final_bg))
+        self.wait(1.2)
 
 
 # README (rendering notes):
