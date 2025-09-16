@@ -28,6 +28,9 @@ python scripts/recon_cli.py scripts/house.yaml --steps 5 --deterministic --ret-f
 
 # Alternative: dump to a file
 python scripts/recon_cli.py scripts/house.yaml --steps 10 --out snapshot.json
+
+# Run comprehensive graph validation demo
+python scripts/graph_validation_demo.py
 ```
 
 ## Problem Framing
@@ -42,12 +45,13 @@ ReCoN consists of SCRIPT and TERMINAL units that are tiny finite-state machines 
 
 - Core modules and responsibilities:
   - `recon_core/engine.py` — update cycle, compact gate arithmetic, message passing
-  - `recon_core/graph.py` — `Unit`, `Edge`, `Graph` data structures
+  - `recon_core/graph.py` — `Unit`, `Edge`, `Graph` data structures + comprehensive validation
   - `recon_core/enums.py` — states, messages, link types, unit types
   - `recon_core/compiler.py` — YAML → graph (hierarchy via SUB/SUR; sequence via POR/RET)
   - `recon_core/metrics.py` — runtime stats and convenience helpers
   - `perception/dataset.py` — synthetic scenes (house, barn, occlusion, variations)
   - `perception/terminals.py` — terminal features (filters, SIFT-like, autoencoder)
+  - `scripts/graph_validation_demo.py` — comprehensive validation demonstration
   - `viz/app_streamlit.py` — interactive visualization
 
 ```mermaid
@@ -189,18 +193,60 @@ Rationale: synthetic glyph-like scenes make object structure explicit (e.g., roo
 
 The UI presents the network graph with nodes colored by state and animated message edges, alongside the current scene and overlays for detected terminals. Controls allow single-step, run/pause, and reset. This pairing makes it easy to see which requests were issued, which evidence arrived, and why a script confirmed or failed.
 
+## Graph Validation System
+
+The implementation includes a comprehensive graph validation system that ensures network integrity and performance:
+
+### Validation Capabilities
+- **Cycle Detection**: Identifies problematic cycles in SUB/SUR relationships that could cause infinite loops
+- **Link Consistency**: Validates proper link type usage (SUB from terminals, POR between scripts, etc.)
+- **Unit Relationships**: Ensures terminals and scripts follow proper hierarchical patterns
+- **Activation Bounds**: Checks activation levels and thresholds are within valid ranges [0.0, 1.0]
+- **Graph Integrity**: Detects orphaned units, connectivity issues, and structural problems
+- **Performance Metrics**: Analyzes complexity, efficiency, and identifies bottlenecks
+- **Health Scoring**: Overall graph quality assessment from 0.0 (unhealthy) to 1.0 (perfect)
+- **Custom Validation**: Extensible framework for domain-specific validation rules
+
+### Validation Demo
+```bash
+# Run comprehensive validation demonstration
+python scripts/graph_validation_demo.py
+```
+
+This demo showcases the system detecting 16 validation issues across 5 categories, including cycles, link consistency violations, unit relationship problems, activation bound errors, and graph integrity issues.
+
+### Integration with Existing Workflow
+```python
+from recon_core.compiler import compile_from_file
+
+# Compile and validate a ReCoN script
+graph = compile_from_file('scripts/house.yaml')
+
+# Quick validity check
+if graph.is_valid():
+    print("Graph structure is valid!")
+else:
+    print("Graph has validation issues")
+
+# Get comprehensive statistics
+stats = graph.get_graph_statistics()
+print(f"Health score: {stats['health_score']:.3f}")
+print(f"Validation issues: {stats['validation_summary']['total_issues']}")
+```
+
 ## Experiments & Results
 
 - Qualitative traces: step-by-step sequences on house and barn scenes showing selective SUR requests, confirmations via SUB, and POR-driven sequencing (e.g., roof → body → door).
 - Stressors: occlusion and added noise to illustrate failure cases and how inhibition/ordering affect behavior.
 - Toggles: with/without POR; different confirmation ratios; deterministic vs. nondeterministic ordering.
+- Validation testing: Comprehensive validation system tested with intentionally problematic graphs, successfully detecting all categories of structural issues.
 
 ## Evaluation vs. CIMC Criteria
 
 - Implemented a novel theoretical idea → faithful ReCoN with tests and docs.
 - Translation between representation and UI → interactive visualization + CLI.
 - Active perception exhibited → selective terminal requests, temporal sequencing.
-- Bonus (if applicable) → learning utilities, format conversion, metrics suite.
+- Bonus (if applicable) → learning utilities, format conversion, metrics suite, comprehensive graph validation system with cycle detection, performance monitoring, and health scoring.
 
 ## Limitations & Future Work
 

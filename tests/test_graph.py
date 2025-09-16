@@ -595,5 +595,232 @@ class TestGraph:
             graph_module.HAS_NETWORKX = original_has_networkx
 
 
+class TestGraphValidation:
+    """Test the new graph validation methods."""
+
+    def test_cycle_detection_sub_cycles(self):
+        """Test detection of cycles in SUB links."""
+        graph = Graph()
+
+        # Create a cycle: u1 -> u2 -> u3 -> u1
+        u1 = Unit('u1', UnitType.SCRIPT)
+        u2 = Unit('u2', UnitType.SCRIPT)
+        u3 = Unit('u3', UnitType.SCRIPT)
+
+        graph.add_unit(u1)
+        graph.add_unit(u2)
+        graph.add_unit(u3)
+
+        graph.add_edge(Edge('u1', 'u2', LinkType.SUB))
+        graph.add_edge(Edge('u2', 'u3', LinkType.SUB))
+        graph.add_edge(Edge('u3', 'u1', LinkType.SUB))
+
+        cycles = graph.validate_cycles(LinkType.SUB)
+        assert 'SUB' in cycles
+        assert len(cycles['SUB']) == 1
+        # Check that the cycle contains all expected nodes (order may vary)
+        cycle_desc = cycles['SUB'][0]
+        assert 'u1' in cycle_desc and 'u2' in cycle_desc and 'u3' in cycle_desc
+        assert cycle_desc.count('->') == 3  # Should have 3 connections in the cycle
+
+    def test_cycle_detection_no_cycles(self):
+        """Test that acyclic graphs return empty cycle lists."""
+        graph = Graph()
+
+        # Create a simple DAG
+        u1 = Unit('u1', UnitType.SCRIPT)
+        u2 = Unit('u2', UnitType.SCRIPT)
+        u3 = Unit('u3', UnitType.SCRIPT)
+
+        graph.add_unit(u1)
+        graph.add_unit(u2)
+        graph.add_unit(u3)
+
+        graph.add_edge(Edge('u1', 'u2', LinkType.SUB))
+        graph.add_edge(Edge('u2', 'u3', LinkType.SUB))
+
+        cycles = graph.validate_cycles()
+        assert cycles == {}  # No cycles in any link type
+
+    def test_link_consistency_validation(self):
+        """Test link type consistency validation."""
+        graph = Graph()
+
+        # Create units
+        terminal = Unit('terminal', UnitType.TERMINAL)
+        script1 = Unit('script1', UnitType.SCRIPT)
+        script2 = Unit('script2', UnitType.SCRIPT)
+
+        graph.add_unit(terminal)
+        graph.add_unit(script1)
+        graph.add_unit(script2)
+
+        # Valid SUB link: terminal -> script
+        graph.add_edge(Edge('terminal', 'script1', LinkType.SUB))
+
+        # Invalid POR link: terminal -> script (POR should only connect scripts)
+        graph.add_edge(Edge('terminal', 'script1', LinkType.POR))
+
+        issues = graph.validate_link_consistency()
+        assert 'por_link_issues' in issues
+        assert len(issues['por_link_issues']) == 1
+        assert 'POR link between TERMINAL' in issues['por_link_issues'][0]
+
+    def test_unit_relationships_validation(self):
+        """Test unit relationship validation."""
+        graph = Graph()
+
+        # Create units
+        terminal = Unit('terminal', UnitType.TERMINAL)
+        script = Unit('script', UnitType.SCRIPT)
+
+        graph.add_unit(terminal)
+        graph.add_unit(script)
+
+        # Valid connections
+        graph.add_edge(Edge('terminal', 'script', LinkType.SUB))  # Evidence flow
+        graph.add_edge(Edge('script', 'terminal', LinkType.SUR))  # Request flow
+
+        # Invalid: terminal sending SUR (should only receive)
+        graph.add_edge(Edge('terminal', 'script', LinkType.SUR))
+
+        issues = graph.validate_unit_relationships()
+        assert 'terminal_relationships' in issues
+        assert len(issues['terminal_relationships']) == 1
+        assert 'invalid outgoing links' in issues['terminal_relationships'][0]
+
+    def test_activation_bounds_validation(self):
+        """Test activation bounds validation."""
+        graph = Graph()
+
+        # Create units with out-of-bounds values
+        unit_valid = Unit('valid', UnitType.TERMINAL, a=0.8, thresh=0.5)
+        unit_invalid_a = Unit('invalid_a', UnitType.TERMINAL, a=1.5, thresh=0.5)  # activation > 1.0
+        unit_invalid_thresh = Unit('invalid_thresh', UnitType.TERMINAL, a=0.5, thresh=1.2)  # threshold > 1.0
+
+        graph.add_unit(unit_valid)
+        graph.add_unit(unit_invalid_a)
+        graph.add_unit(unit_invalid_thresh)
+
+        issues = graph.validate_activation_bounds(strict=True)
+        assert 'activation_errors' in issues
+        assert 'threshold_errors' in issues
+        assert len(issues['activation_errors']) == 1
+        assert len(issues['threshold_errors']) == 1
+
+    def test_graph_integrity_validation(self):
+        """Test graph integrity validation."""
+        graph = Graph()
+
+        # Create units and edges
+        unit1 = Unit('u1', UnitType.TERMINAL)
+        unit2 = Unit('u2', UnitType.SCRIPT)
+        unit3 = Unit('u3', UnitType.TERMINAL)  # Isolated unit
+
+        graph.add_unit(unit1)
+        graph.add_unit(unit2)
+        graph.add_unit(unit3)
+
+        graph.add_edge(Edge('u1', 'u2', LinkType.SUB))
+
+        issues = graph.validate_graph_integrity()
+        assert 'orphaned_units' in issues
+        assert len(issues['orphaned_units']) == 1
+        assert 'u3' in issues['orphaned_units'][0]
+
+    def test_comprehensive_validation(self):
+        """Test the comprehensive validate_all method."""
+        graph = Graph()
+
+        # Create a graph with multiple issues
+        terminal = Unit('terminal', UnitType.TERMINAL, a=1.2, thresh=0.5)  # Invalid activation
+        script = Unit('script', UnitType.SCRIPT)
+        isolated = Unit('isolated', UnitType.TERMINAL)  # No connections
+
+        graph.add_unit(terminal)
+        graph.add_unit(script)
+        graph.add_unit(isolated)
+
+        # Add some edges with issues
+        graph.add_edge(Edge('terminal', 'script', LinkType.SUB))
+        graph.add_edge(Edge('terminal', 'script', LinkType.POR))  # Invalid POR link
+
+        results = graph.validate_all(strict_activation=True)
+
+        # Should have multiple categories with issues
+        assert 'activation_bounds' in results
+        assert 'link_consistency' in results
+        assert 'graph_integrity' in results
+
+        # Check summary
+        summary = graph.get_validation_summary(results)
+        assert summary['total_issues'] > 0
+        assert summary['errors'] > 0
+
+        # Graph should not be valid
+        assert not graph.is_valid(strict_activation=True)
+
+    def test_performance_metrics_analysis(self):
+        """Test performance metrics analysis."""
+        graph = Graph()
+
+        # Create a moderately complex graph
+        for i in range(10):
+            unit_type = UnitType.TERMINAL if i < 7 else UnitType.SCRIPT
+            graph.add_unit(Unit(f'u{i}', unit_type))
+
+        # Add some connections
+        for i in range(7):
+            graph.add_edge(Edge(f'u{i}', f'u{i%3+7}', LinkType.SUB))
+
+        metrics = graph.analyze_performance_metrics()
+
+        assert 'structure_metrics' in metrics
+        assert 'complexity_metrics' in metrics
+        assert 'efficiency_indicators' in metrics
+
+        assert metrics['structure_metrics']['total_units'] == 10
+        assert metrics['structure_metrics']['terminals'] == 7
+        assert metrics['structure_metrics']['scripts'] == 3
+
+    def test_graph_statistics(self):
+        """Test comprehensive graph statistics."""
+        graph = Graph()
+
+        # Create a simple valid graph
+        root = Unit('root', UnitType.SCRIPT)
+        terminal = Unit('terminal', UnitType.TERMINAL)
+
+        graph.add_unit(root)
+        graph.add_unit(terminal)
+        graph.add_edge(Edge('terminal', 'root', LinkType.SUB))
+        graph.add_edge(Edge('root', 'terminal', LinkType.SUR))
+
+        stats = graph.get_graph_statistics()
+
+        assert 'basic_stats' in stats
+        assert 'validation_summary' in stats
+        assert 'performance_metrics' in stats
+        assert 'health_score' in stats
+
+        # Should have a high health score for a valid graph
+        assert stats['health_score'] > 0.8
+
+    def test_health_score_calculation(self):
+        """Test health score calculation with various issues."""
+        graph = Graph()
+
+        # Create a graph with issues
+        unit = Unit('unit', UnitType.TERMINAL, a=1.5, thresh=0.5)  # Invalid activation
+        graph.add_unit(unit)
+
+        stats = graph.get_graph_statistics()
+        health_score = stats['health_score']
+
+        # Should have reduced health score due to errors
+        assert health_score < 1.0
+        assert health_score > 0.0
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

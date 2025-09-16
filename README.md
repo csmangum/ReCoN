@@ -11,6 +11,7 @@ A faithful, comprehensive **Request Confirmation Network** (ReCoN) implementatio
 - **Hierarchical Recognition**: Multi-level part-based object recognition
 - **Temporal Sequencing**: Ordered execution via precedence links
 - **Interactive Visualization**: Real-time network dynamics
+- **Graph Validation**: Comprehensive validation of network structure and integrity
 - **Extensible Architecture**: Clean separation for custom applications
 - **Comprehensive Testing**: Full test coverage for reliability
 
@@ -46,6 +47,9 @@ python scripts/recon_cli.py scripts/house.yaml --sur 0.25 --por 0.6 --confirm-ra
 
 # Dump to a file
 python scripts/recon_cli.py scripts/house.yaml --steps 10 --out snapshot.json
+
+# Run comprehensive graph validation demo
+python scripts/graph_validation_demo.py
 ```
 
 Then click **Generate Scene** and **Run** to watch the active perception in action!
@@ -63,7 +67,8 @@ perception/
   dataset.py      # synthetic 2D scenes with variety (houses, barns, occlusion)
   terminals.py    # comprehensive terminal features (filters + SIFT + autoencoder)
 scripts/
-  house.yaml      # script → recon graph compiler input
+  house.yaml                    # script → recon graph compiler input
+  graph_validation_demo.py      # comprehensive graph validation demonstration
 viz/
   app_streamlit.py    # interactive visualization
 tests/
@@ -157,10 +162,48 @@ Configuration notes:
 - Gate constants (SUB/SUR/POR/RET) are implemented with concrete defaults matching the paper’s qualitative behavior and are configurable via `EngineConfig`.
 - Optional per-link minimal source activation thresholds can be set to suppress propagation unless the source activation exceeds a chosen value: `sub_min_source_activation`, `sur_min_source_activation`, `por_min_source_activation`, `ret_min_source_activation` (all default to 0.0 to preserve baseline behavior).
 
-**44+ tests** covering:
+**50+ tests** covering:
 - **18 synthetic scene tests**: Drawing primitives, house/barn generation, occlusion, variations
 - **26 terminal feature tests**: Basic filters, SIFT-like features, autoencoder, integration
+- **10 graph validation tests**: Cycle detection, link consistency, activation bounds, performance metrics
 - **Original core tests**: State transitions, message passing, inhibition, temporal sequencing
+
+### Graph Validation Features
+
+The ReCoN implementation includes comprehensive graph validation capabilities to ensure network integrity and performance:
+
+```python
+from recon_core.graph import Graph, Unit, Edge
+from recon_core.enums import UnitType, LinkType
+
+# Create and validate a graph
+graph = Graph()
+# ... add units and edges ...
+
+# Quick validity check
+if graph.is_valid():
+    print("Graph structure is valid!")
+else:
+    print("Graph has validation issues")
+
+# Comprehensive validation with detailed report
+validation_results = graph.validate_all()
+summary = graph.get_validation_summary(validation_results)
+print(f"Found {summary['total_issues']} issues: {summary['errors']} errors, {summary['warnings']} warnings")
+
+# Performance analysis
+performance = graph.analyze_performance_metrics()
+print(f"Health score: {graph.get_graph_statistics()['health_score']:.3f}")
+```
+
+**Validation Capabilities:**
+- **Cycle Detection**: Identifies problematic cycles in SUB/SUR relationships
+- **Link Consistency**: Validates proper link type usage (SUB from terminals, POR between scripts, etc.)
+- **Unit Relationships**: Ensures terminals and scripts follow proper hierarchical patterns
+- **Activation Bounds**: Checks activation levels and thresholds are within valid ranges
+- **Graph Integrity**: Detects orphaned units, connectivity issues, and structural problems
+- **Performance Metrics**: Analyzes complexity, efficiency, and identifies bottlenecks
+- **Custom Validation**: Extensible framework for domain-specific validation rules
 
 ## 💡 Usage Examples
 
