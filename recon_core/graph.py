@@ -331,7 +331,9 @@ class Graph:
             successors = []
             if link_type == LinkType.SUB:
                 successors = [
-                    e.src for e in self.in_edges.get(node_id, []) if e.type == link_type
+                    e.dst
+                    for e in self.out_edges.get(node_id, [])
+                    if e.type == link_type
                 ]
             elif link_type == LinkType.SUR:
                 successors = [
@@ -347,7 +349,9 @@ class Graph:
                 ]
             elif link_type == LinkType.RET:
                 successors = [
-                    e.src for e in self.in_edges.get(node_id, []) if e.type == link_type
+                    e.dst
+                    for e in self.out_edges.get(node_id, [])
+                    if e.type == link_type
                 ]
 
             for successor in successors:
