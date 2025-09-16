@@ -624,17 +624,23 @@ class Graph:
             outgoing_types = {e.type for e in self.out_edges.get(script_id, [])}
             incoming_types = {e.type for e in self.in_edges.get(script_id, [])}
 
-            # Scripts should not have SUB links (they receive evidence, don't send it)
-            if LinkType.SUB in outgoing_types:
-                issues["script_hierarchy"].append(
-                    f"Script '{script_id}' has outgoing SUB links - scripts should receive SUB links"
-                )
+            # Check for inappropriate SUB link targets (scripts should only send SUB links to other scripts, not terminals)
+            for edge in self.out_edges.get(script_id, []):
+                if edge.type == LinkType.SUB:
+                    target_unit = self.units.get(edge.dst)
+                    if target_unit and target_unit.kind == UnitType.TERMINAL:
+                        issues["script_hierarchy"].append(
+                            f"Script '{script_id}' sends SUB link to terminal '{edge.dst}' - scripts should receive SUB links from terminals"
+                        )
 
-            # Scripts should not receive SUR links (they send requests, don't receive them)
-            if LinkType.SUR in incoming_types:
-                issues["script_hierarchy"].append(
-                    f"Script '{script_id}' has incoming SUR links - scripts should send SUR links"
-                )
+            # Check for inappropriate SUR link sources (scripts should only receive SUR links from other scripts, not terminals)
+            for edge in self.in_edges.get(script_id, []):
+                if edge.type == LinkType.SUR:
+                    source_unit = self.units.get(edge.src)
+                    if source_unit and source_unit.kind == UnitType.TERMINAL:
+                        issues["script_hierarchy"].append(
+                            f"Script '{script_id}' receives SUR link from terminal '{edge.src}' - terminals should not send requests to scripts"
+                        )
 
         # Check for root scripts (scripts with no incoming SUB links)
         root_scripts = []

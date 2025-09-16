@@ -689,6 +689,52 @@ class TestGraphValidation:
         assert len(issues['terminal_relationships']) == 1
         assert 'invalid outgoing links' in issues['terminal_relationships'][0]
 
+        # With the fix, we should also catch this from the script's perspective
+        assert 'script_hierarchy' in issues
+        assert len(issues['script_hierarchy']) == 1
+        assert 'receives SUR link from terminal' in issues['script_hierarchy'][0]
+
+    def test_script_hierarchy_validation_legitimate_sur_links(self):
+        """Test that legitimate script-to-script SUR links are allowed."""
+        graph = Graph()
+
+        # Create parent and child scripts
+        parent_script = Unit('parent_script', UnitType.SCRIPT)
+        child_script = Unit('child_script', UnitType.SCRIPT)
+
+        graph.add_unit(parent_script)
+        graph.add_unit(child_script)
+
+        # Legitimate hierarchical connections
+        graph.add_edge(Edge('child_script', 'parent_script', LinkType.SUB))  # Evidence flow
+        graph.add_edge(Edge('parent_script', 'child_script', LinkType.SUR))  # Request flow (legitimate)
+
+        issues = graph.validate_unit_relationships()
+
+        # Should have no script_hierarchy issues (legitimate script-to-script SUB and SUR links)
+        assert 'script_hierarchy' not in issues or len(issues.get('script_hierarchy', [])) == 0
+
+    def test_script_hierarchy_validation_invalid_sub_links(self):
+        """Test that inappropriate script-to-terminal SUB links are flagged."""
+        graph = Graph()
+
+        # Create script and terminal
+        script = Unit('script', UnitType.SCRIPT)
+        terminal = Unit('terminal', UnitType.TERMINAL)
+
+        graph.add_unit(script)
+        graph.add_unit(terminal)
+
+        # Invalid: script sending SUB to terminal (should be terminal -> script)
+        graph.add_edge(Edge('script', 'terminal', LinkType.SUB))
+
+        issues = graph.validate_unit_relationships()
+
+        # Should have script_hierarchy issue
+        assert 'script_hierarchy' in issues
+        assert len(issues['script_hierarchy']) == 1
+        assert 'sends SUB link to terminal' in issues['script_hierarchy'][0]
+
     def test_activation_bounds_validation(self):
         """Test activation bounds validation."""
         graph = Graph()
