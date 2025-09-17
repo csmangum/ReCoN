@@ -46,12 +46,13 @@ if SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, SCRIPTS_DIR)
 
 
-from perception.dataset import make_house_scene, make_castle_scene
+from manim_common import BaseReconScene, NodeViz, edge_arrow, gradient_edge_arrow
+
+from perception.dataset import make_castle_scene, make_house_scene
 from perception.terminals import terminals_from_image
+from recon_core.engine import Engine, EngineConfig
 from recon_core.enums import LinkType, State, UnitType
 from recon_core.graph import Edge, Graph, Unit
-from manim_common import NodeViz, edge_arrow, gradient_edge_arrow, BaseReconScene
-from recon_core.engine import Engine, EngineConfig
 
 # ---------- Helpers to construct the demo graph and run steps ----------
 
@@ -104,13 +105,15 @@ def _simulate_and_capture_messages(g: Graph, steps: int = 8) -> List[dict]:
 
     class RecordingEngine(Engine):
         def send_message(self, sender_id: str, receiver_id: str, message):
-            msg_name = getattr(message, 'name', str(message))
-            captured.append({
-                "t": self.t,
-                "sender": sender_id,
-                "receiver": receiver_id,
-                "message": msg_name,
-            })
+            msg_name = getattr(message, "name", str(message))
+            captured.append(
+                {
+                    "t": self.t,
+                    "sender": sender_id,
+                    "receiver": receiver_id,
+                    "message": msg_name,
+                }
+            )
             super().send_message(sender_id, receiver_id, message)
 
     eng = RecordingEngine(g, EngineConfig())
@@ -158,6 +161,18 @@ class RootActivationScene(BaseReconScene):
         house.move_to([-4.5, -0.5, 0])
         self.play(FadeIn(house), run_time=1.0)
 
+        # Add house title
+        house_title = Text("Synthetic House", font_size=24, color=WHITE)
+        house_title.next_to(house, UP, buff=0.3)
+        self.play(FadeIn(house_title), run_time=0.5)
+
+        # Add descriptive text above the scene
+        description_text = Text(
+            "Initializing network structure...", font_size=20, color=WHITE
+        )
+        description_text.to_edge(UP, buff=0.5)
+        self.play(FadeIn(description_text), run_time=0.5)
+
         # 2) Build network viz on the right
         g = build_house_graph()
 
@@ -178,6 +193,21 @@ class RootActivationScene(BaseReconScene):
         nodes, node_group = self.build_nodes(g, node_positions)
         self.play(FadeIn(node_group), run_time=2.0, rate_func=rf.ease_in_out_sine)
 
+        # Add "House Hypothesis" title above the root node
+        root_hypothesis_title = Text("House Hypothesis", font_size=20, color=WHITE)
+        root_hypothesis_title.next_to(nodes["u_root"].shape, UP, buff=0.4)
+        self.play(FadeIn(root_hypothesis_title), run_time=0.5)
+
+        # Update description text
+        new_description = Text(
+            "Network nodes created - Root, Scripts, and Terminals",
+            font_size=20,
+            color=WHITE,
+        )
+        new_description.to_edge(UP, buff=0.5)
+        self.play(FadeOut(description_text), FadeIn(new_description), run_time=0.5)
+        description_text = new_description
+
         background_edges, sur_edges, sub_edges, por_edges = self.compute_edges(g, nodes)
 
         # Draw background edges first (behind nodes)
@@ -185,11 +215,31 @@ class RootActivationScene(BaseReconScene):
             edge.set_z_index(-1)
         self.play(*[FadeIn(m) for m in background_edges], lag_ratio=0.02, run_time=2.0)
 
+        # Update description text
+        new_description = Text(
+            "Network connections established - SUR, SUB, and POR links",
+            font_size=20,
+            color=WHITE,
+        )
+        new_description.to_edge(UP, buff=0.5)
+        self.play(FadeOut(description_text), FadeIn(new_description), run_time=0.5)
+        description_text = new_description
+
         # Wait a moment to show the network
         self.wait(1.0)
 
         # 3) Show root node activation
         root_node = nodes["u_root"]
+
+        # Update description text
+        new_description = Text(
+            "Root node activation - Starting the perception process",
+            font_size=20,
+            color=YELLOW,
+        )
+        new_description.to_edge(UP, buff=0.5)
+        self.play(FadeOut(description_text), FadeIn(new_description), run_time=0.5)
+        description_text = new_description
 
         # Highlight the root node activation with color change
         root_highlight = self.create_highlight_shape(root_node, YELLOW, stroke_width=4)
@@ -198,7 +248,7 @@ class RootActivationScene(BaseReconScene):
         self.play(
             FadeIn(root_highlight),
             root_node.shape.animate.set_fill(YELLOW, opacity=0.3),
-            run_time=1.0
+            run_time=1.0,
         )
 
         # Add activation text
@@ -209,7 +259,15 @@ class RootActivationScene(BaseReconScene):
         self.wait(0.5)
 
         # 4) Animate REQUEST messages moving to children
-        # The SUR edges are: u_root -> u_roof, u_root -> u_body, u_root -> u_door
+        # The SUR edges are: u_root -> u_body, u_root -> u_door
+
+        # Update description text
+        new_description = Text(
+            "Sending REQUEST messages to child scripts", font_size=20, color=YELLOW
+        )
+        new_description.to_edge(UP, buff=0.5)
+        self.play(FadeOut(description_text), FadeIn(new_description), run_time=0.5)
+        description_text = new_description
 
         message_animations = []
         for src_id, dst_id in sur_edges:
@@ -224,6 +282,16 @@ class RootActivationScene(BaseReconScene):
 
         # 5) Show child scripts becoming ACTIVE and sending requests to terminals
         self.wait(1.0)
+
+        # Update description text
+        new_description = Text(
+            "Child scripts become ACTIVE and request terminal data",
+            font_size=20,
+            color=BLUE,
+        )
+        new_description.to_edge(UP, buff=0.5)
+        self.play(FadeOut(description_text), FadeIn(new_description), run_time=0.5)
+        description_text = new_description
 
         # Child scripts transition to ACTIVE (roof, body, door)
         active_animations = []
@@ -280,6 +348,14 @@ class RootActivationScene(BaseReconScene):
         # 7) Terminals detect features and send CONFIRM messages back
         self.wait(1.0)
 
+        # Update description text
+        new_description = Text(
+            "Terminals detect features and become TRUE", font_size=20, color=GREEN
+        )
+        new_description.to_edge(UP, buff=0.5)
+        self.play(FadeOut(description_text), FadeIn(new_description), run_time=0.5)
+        description_text = new_description
+
         # Terminals become TRUE (detect features)
         terminal_true_animations = []
         for term_id in ["t_horz", "t_mean", "t_vert"]:
@@ -302,6 +378,14 @@ class RootActivationScene(BaseReconScene):
 
         # Send CONFIRM messages back to scripts
         self.wait(0.5)
+
+        # Update description text
+        new_description = Text(
+            "Terminals send CONFIRM messages back to scripts", font_size=20, color=GREEN
+        )
+        new_description.to_edge(UP, buff=0.5)
+        self.play(FadeOut(description_text), FadeIn(new_description), run_time=0.5)
+        description_text = new_description
 
         confirm_animations = []
 
@@ -334,6 +418,16 @@ class RootActivationScene(BaseReconScene):
         # 8) Scripts become CONFIRMED
         self.wait(0.8)
 
+        # Update description text
+        new_description = Text(
+            "Scripts become CONFIRMED after receiving terminal data",
+            font_size=20,
+            color=GREEN,
+        )
+        new_description.to_edge(UP, buff=0.5)
+        self.play(FadeOut(description_text), FadeIn(new_description), run_time=0.5)
+        description_text = new_description
+
         confirmed_animations = []
         for script_id in ["u_roof", "u_body", "u_door"]:
             script_node = nodes[script_id]
@@ -354,36 +448,62 @@ class RootActivationScene(BaseReconScene):
         self.play(
             *[FadeOut(label) for label in active_labels],
             *[FadeIn(label) for label in confirmed_labels],
-            run_time=0.6
+            run_time=0.6,
         )
 
         # 9) Scripts send CONFIRM messages back to root
         self.wait(1.0)
 
+        # Update description text
+        new_description = Text(
+            "Scripts send CONFIRM messages back to root", font_size=20, color=GREEN
+        )
+        new_description.to_edge(UP, buff=0.5)
+        self.play(FadeOut(description_text), FadeIn(new_description), run_time=0.5)
+        description_text = new_description
+
+        # Animate all confirmations simultaneously
         root_confirm_animations = []
 
         # Roof script -> root
-        roof_to_root = self.animate_message_between_nodes(
-            nodes["u_roof"], nodes["u_root"], "CONFIRM", GREEN, 1.2
+        roof_to_root = self.animate_message_to_root(
+            nodes["u_roof"], nodes["u_root"], "CONFIRM", GREEN, 1.5
         )
         root_confirm_animations.append(roof_to_root)
 
         # Body script -> root
-        body_to_root = self.animate_message_between_nodes(
-            nodes["u_body"], nodes["u_root"], "CONFIRM", GREEN, 1.2
+        body_to_root = self.animate_message_to_root(
+            nodes["u_body"], nodes["u_root"], "CONFIRM", GREEN, 1.5
         )
         root_confirm_animations.append(body_to_root)
 
         # Door script -> root
-        door_to_root = self.animate_message_between_nodes(
-            nodes["u_door"], nodes["u_root"], "CONFIRM", GREEN, 1.2
+        door_to_root = self.animate_message_to_root(
+            nodes["u_door"], nodes["u_root"], "CONFIRM", GREEN, 1.5
         )
         root_confirm_animations.append(door_to_root)
 
-        self.play(*root_confirm_animations, run_time=2.0)
+        # Play all confirmations simultaneously
+        self.play(*root_confirm_animations, run_time=1.5)
 
-        # 10) Root becomes CONFIRMED
+        # 10) Root becomes CONFIRMED after receiving all confirmations
         self.wait(0.8)
+
+        # Update description text
+        new_description = Text(
+            "Root becomes CONFIRMED - Perception process complete",
+            font_size=20,
+            color=GREEN,
+        )
+        new_description.to_edge(UP, buff=0.5)
+        self.play(FadeOut(description_text), FadeIn(new_description), run_time=0.5)
+        description_text = new_description
+
+        # Highlight the root node to show it received all confirmations
+        root_highlight = self.create_highlight_shape(
+            nodes["u_root"], GREEN, stroke_width=4
+        )
+        root_highlight.move_to(nodes["u_root"].shape.get_center())
 
         # Root transitions to CONFIRMED state
         root_confirmed_fill = nodes["u_root"].shape.animate.set_fill(GREEN, opacity=0.6)
@@ -391,14 +511,16 @@ class RootActivationScene(BaseReconScene):
         root_confirmed_label.move_to(activation_text.get_center())
 
         self.play(
+            FadeIn(root_highlight),
             FadeOut(activation_text),
             FadeIn(root_confirmed_label),
             root_confirmed_fill,
-            run_time=0.8
+            run_time=0.8,
         )
 
         # Hold the final state
         self.wait(2.0)
+
 
 class HouseWalkthrough(BaseReconScene):
     """Single, concise walkthrough scene."""
@@ -418,6 +540,7 @@ class HouseWalkthrough(BaseReconScene):
         self.play(FadeIn(title), FadeIn(subtitle), run_time=1.5)
         self.wait(1.0)
         self.play(FadeOut(title), FadeOut(subtitle), run_time=1.5)
+
         self.play(FadeIn(house), run_time=2.0)
 
         # 2) Build network viz on the right
@@ -464,7 +587,9 @@ class HouseHypothesisOnCastle(BaseReconScene):
 
         # Title
         title = Text("House Hypothesis on Castle", font_size=30)
-        subtitle = Text("True engine messages", font_size=20)
+        subtitle = Text(
+            "Testing hypothesis on different image - True engine messages", font_size=20
+        )
         subtitle.next_to(title, DOWN)
         self.play(FadeIn(title), FadeIn(subtitle), run_time=1.0)
         self.wait(0.4)
@@ -509,13 +634,18 @@ class HouseHypothesisOnCastle(BaseReconScene):
                 msg_name = str(m.get("message"))
                 if s in nodes and r in nodes:
                     color = _color_for_message(msg_name)
-                    anims.append(self.animate_message_between_nodes(nodes[s], nodes[r], msg_name, color, 0.9))
+                    anims.append(
+                        self.animate_message_between_nodes(
+                            nodes[s], nodes[r], msg_name, color, 0.9
+                        )
+                    )
             if anims:
                 self.play(*anims, run_time=1.4)
                 self.wait(0.1)
 
         # Freeze last frame
         self.wait(1.6)
+
 
 # README (rendering notes):
 # - Install Manim Community (and Cairo/ffmpeg per platform):
