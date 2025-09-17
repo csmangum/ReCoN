@@ -1,0 +1,16 @@
+object: church
+children:
+  - id: roof
+    type: AND
+    parts: [t_horz]
+  - id: body
+    type: AND
+    parts: [t_mean]
+  - id: steeple
+    type: AND
+    parts: [t_vert]
+sequence:
+  - roof
+  - body
+  - steeple
+

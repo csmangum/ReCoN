@@ -1,0 +1,20 @@
+object: castle
+children:
+  - id: wall
+    type: AND
+    parts: [t_mean]
+  - id: crenellations
+    type: AND
+    parts: [t_horz]
+  - id: towers
+    type: AND
+    parts: [t_vert]
+  - id: gate
+    type: OR
+    parts: [t_mean, t_vert]
+sequence:
+  - wall
+  - towers
+  - crenellations
+  - gate
+

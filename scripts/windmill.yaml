@@ -1,0 +1,20 @@
+object: windmill
+children:
+  - id: tower
+    type: AND
+    parts: [t_mean, t_vert]
+  - id: roof
+    type: AND
+    parts: [t_horz]
+  - id: hub
+    type: AND
+    parts: [t_blobs]
+  - id: blades
+    type: AND
+    parts: [t_horz, t_vert]
+sequence:
+  - tower
+  - roof
+  - hub
+  - blades
+

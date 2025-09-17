@@ -1,0 +1,12 @@
+object: tower
+children:
+  - id: body
+    type: AND
+    parts: [t_vert, t_mean]
+  - id: windows
+    type: OR
+    parts: [t_horz, t_mean]
+sequence:
+  - body
+  - windows
+

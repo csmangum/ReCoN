@@ -1,0 +1,13 @@
+object: occluded
+children:
+  - id: house
+    type: AND
+    parts: [t_mean]
+  - id: occluder
+    type: OR
+    parts: [t_horz, t_vert]
+sequence:
+  - scan_house_then_occluder
+  - house
+  - occluder
+
