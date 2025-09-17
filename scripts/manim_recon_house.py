@@ -23,6 +23,7 @@ from manim import (
     BLUE,
     DOWN,
     GREEN,
+    RED,
     UP,
     WHITE,
     YELLOW,
@@ -45,11 +46,12 @@ if SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, SCRIPTS_DIR)
 
 
-from perception.dataset import make_house_scene
+from perception.dataset import make_house_scene, make_castle_scene
 from perception.terminals import terminals_from_image
 from recon_core.enums import LinkType, State, UnitType
 from recon_core.graph import Edge, Graph, Unit
 from manim_common import NodeViz, edge_arrow, gradient_edge_arrow, BaseReconScene
+from recon_core.engine import Engine, EngineConfig
 
 # ---------- Helpers to construct the demo graph and run steps ----------
 
@@ -94,6 +96,44 @@ def init_terminals_from_image(g: Graph, img: np.ndarray) -> Dict[str, float]:
 
 
 # ---------- Scenes ----------
+
+
+def _simulate_and_capture_messages(g: Graph, steps: int = 8) -> List[dict]:
+    """Run the engine for a few steps and capture delivered messages with timestamps."""
+    captured: List[dict] = []
+
+    class RecordingEngine(Engine):
+        def send_message(self, sender_id: str, receiver_id: str, message):
+            msg_name = getattr(message, 'name', str(message))
+            captured.append({
+                "t": self.t,
+                "sender": sender_id,
+                "receiver": receiver_id,
+                "message": msg_name,
+            })
+            super().send_message(sender_id, receiver_id, message)
+
+    eng = RecordingEngine(g, EngineConfig())
+    eng.step(steps)
+    return captured
+
+
+def _group_messages_by_time(captured: List[dict]) -> Dict[int, List[dict]]:
+    grouped: Dict[int, List[dict]] = {}
+    for m in captured:
+        t = int(m.get("t", 0))
+        grouped.setdefault(t, []).append(m)
+    return dict(sorted(grouped.items(), key=lambda kv: kv[0]))
+
+
+def _color_for_message(msg_name: str):
+    if msg_name == "REQUEST":
+        return YELLOW
+    if msg_name == "CONFIRM":
+        return GREEN
+    if msg_name in ("INHIBIT_REQUEST", "INHIBIT_CONFIRM"):
+        return RED
+    return WHITE
 
 
 class RootActivationScene(BaseReconScene):
@@ -408,6 +448,71 @@ class HouseWalkthrough(BaseReconScene):
         # Graph is now built and displayed
         self.wait(2.0)
 
+
+class HouseHypothesisOnCastle(BaseReconScene):
+    """Accurate message animation by simulating the engine on a castle image."""
+
+    def construct(self):
+        # 1) Castle image on the left
+        img = make_castle_scene(size=64, noise=0.05)
+        pil_arr = (np.clip(img, 0.0, 1.0) * 255).astype(np.uint8)
+        castle = ImageMobject(pil_arr).scale(5.5)
+        castle.move_to([-4.5, -0.5, 0])
+
+        # Title
+        title = Text("House Hypothesis on Castle", font_size=30)
+        subtitle = Text("True engine messages", font_size=20)
+        subtitle.next_to(title, DOWN)
+        self.play(FadeIn(title), FadeIn(subtitle), run_time=1.0)
+        self.wait(0.4)
+        self.play(FadeOut(title), FadeOut(subtitle), run_time=0.6)
+        self.play(FadeIn(castle), run_time=1.0)
+
+        # 2) House graph on the right, initialized from castle terminals
+        g = build_house_graph()
+        init_terminals_from_image(g, img)
+
+        right_x = 2.0
+        y_root = 1.5
+        spread = 3.0
+        node_positions = {
+            "u_root": (right_x, y_root, 0),
+            "u_roof": (right_x - spread, y_root - 2.0, 0),
+            "u_body": (right_x, y_root - 2.0, 0),
+            "u_door": (right_x + spread, y_root - 2.0, 0),
+            "t_horz": (right_x - spread, y_root - 4.0, 0),
+            "t_mean": (right_x, y_root - 4.0, 0),
+            "t_vert": (right_x + spread, y_root - 4.0, 0),
+        }
+
+        nodes, node_group = self.build_nodes(g, node_positions)
+        self.play(FadeIn(node_group), run_time=1.2)
+
+        background_edges, sur_edges, sub_edges, por_edges = self.compute_edges(g, nodes)
+        for edge in background_edges:
+            edge.set_z_index(-1)
+        self.play(*[FadeIn(m) for m in background_edges], lag_ratio=0.02, run_time=1.0)
+
+        # 3) Simulate engine and capture real messages
+        captured = _simulate_and_capture_messages(g, steps=8)
+        grouped = _group_messages_by_time(captured)
+
+        # 4) Animate per-step message batches
+        for _, msgs in grouped.items():
+            anims = []
+            for m in msgs:
+                s = m.get("sender")
+                r = m.get("receiver")
+                msg_name = str(m.get("message"))
+                if s in nodes and r in nodes:
+                    color = _color_for_message(msg_name)
+                    anims.append(self.animate_message_between_nodes(nodes[s], nodes[r], msg_name, color, 0.9))
+            if anims:
+                self.play(*anims, run_time=1.4)
+                self.wait(0.1)
+
+        # Freeze last frame
+        self.wait(1.6)
 
 # README (rendering notes):
 # - Install Manim Community (and Cairo/ffmpeg per platform):
