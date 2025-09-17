@@ -143,9 +143,12 @@ def simple_filters(img):
 
     Note:
     For efficiency and zero-dependency operation, edge responses are computed
-    via a flattened 1D convolution of a 2x2 kernel over the image data rather
-    than a true 2D convolution. This serves as a coarse, fast approximation
-    sufficient for synthetic scenes used in demos/tests.
+    by flattening both the 2x2 kernel and the 2D image into 1D arrays, and then
+    performing a 1D convolution of the flattened kernel over the flattened image
+    data. This is a crude, non-standard proxy for edge detection and is not
+    equivalent to a true 2D convolution. This approximation is only suitable for
+    synthetic scenes used in demos/tests, and should not be used for real image
+    processing tasks.
 
     Args:
         img: Input image as 2D numpy array
