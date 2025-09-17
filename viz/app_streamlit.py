@@ -216,14 +216,26 @@ class ReCoNSimulation:
 
     def step_simulation(self, n_steps=1):
         """Step the simulation forward and record history."""
-        # Capture messages before stepping
+        # Capture messages delivered during this step by wrapping Engine.send_message
         messages_this_step = []
-        for graph_unit in self.graph.units.values():
-            for receiver_id, message in graph_unit.outbox:
-                messages_this_step.append((graph_unit.id, receiver_id, message))
+        original_send_message = self.engine.send_message
 
-        # Step the simulation
-        snap = self.engine.step(n_steps)
+        def tracking_send_message(sender_id, receiver_id, message):
+            try:
+                messages_this_step.append((sender_id, receiver_id, message))
+            except Exception:
+                pass
+            return original_send_message(sender_id, receiver_id, message)
+
+        # Monkey-patch send_message to record deliveries during this step
+        self.engine.send_message = tracking_send_message  # type: ignore
+
+        try:
+            # Step the simulation
+            snap = self.engine.step(n_steps)
+        finally:
+            # Restore original method even if step raises
+            self.engine.send_message = original_send_message  # type: ignore
 
         # Update fovea path (simulate scanning behavior)
         if self.graph.units["u_root"].state == State.ACTIVE:
@@ -426,29 +438,19 @@ with col_scene:
             path_x[-1], path_y[-1], c="red", s=100, alpha=0.8, label="Current fovea"
         )
 
-    # Add terminal detection overlays
-    if "tvals" in st.session_state:
-        # Simple visualization of where terminals are "detecting"
-        # Green dots for active terminals, red for inactive
-        terminal_positions = {
-            "t_mean": (32, 32),  # center
-            "t_vert": (45, 32),  # right side
-            "t_horz": (20, 32),  # left side
-        }
-
-        for term_name, term_value in st.session_state.tvals.items():
-            if term_name in terminal_positions:
-                x, y = terminal_positions[term_name]
-                color = "green" if term_value > 0.3 else "red"
-                size = 50 + term_value * 100  # Size based on activation
-                ax_scene.scatter(
-                    x,
-                    y,
-                    c=color,
-                    s=size,
-                    alpha=0.7,
-                    label=f"{term_name} ({term_value:.2f})",
-                )
+    # Add terminal detection overlays using live activations
+    terminal_positions = {
+        "t_mean": (32, 32),
+        "t_vert": (45, 32),
+        "t_horz": (20, 32),
+    }
+    for term_name, (x, y) in terminal_positions.items():
+        if term_name in st.session_state.sim.graph.units:
+            term_unit = st.session_state.sim.graph.units[term_name]
+            term_value = float(getattr(term_unit, "a", 0.0))
+            color = "green" if term_value > 0.3 else "red"
+            size = 50 + term_value * 100
+            ax_scene.scatter(x, y, c=color, s=size, alpha=0.7, label=f"{term_name} ({term_value:.2f})")
 
     ax_scene.set_xlim(0, 64)
     ax_scene.set_ylim(64, 0)  # Flip y-axis for image coordinates
@@ -493,11 +495,19 @@ with col_scene:
     st.pyplot(fig, use_container_width=True)
 
     # Scene info
-    if "tvals" in st.session_state:
-        st.write("**Terminal Activations:**")
-        cols = st.columns(3)
-        for i, (term_name, term_value) in enumerate(st.session_state.tvals.items()):
-            cols[i].metric(term_name, f"{term_value:.3f}")
+    # Show live terminal activations from current graph
+    terminals_live = [
+        (uid, u.a)
+        for uid, u in st.session_state.sim.graph.units.items()
+        if u.kind == UnitType.TERMINAL
+    ]
+    if terminals_live:
+        st.write("**Terminal Activations (Live):**")
+        terminals_live.sort(key=lambda x: x[0])
+        num_cols = min(3, len(terminals_live))
+        cols = st.columns(num_cols)
+        for i, (term_name, term_value) in enumerate(terminals_live):
+            cols[i % num_cols].metric(term_name, f"{term_value:.3f}")
 
 with col_graph:
     st.subheader("🕸️ Network Graph & Messages")
@@ -547,18 +557,35 @@ with col_graph:
         if term_name in st.session_state.sim.graph.units:
             pos[term_name] = position
 
-    # Position any remaining terminals evenly across the bottom
+    # Position remaining terminals under their actual parent scripts via SUB links
     all_terminals = [
         n for n in st.session_state.sim.graph.units.keys()
         if st.session_state.sim.graph.units[n].kind == UnitType.TERMINAL
     ]
     remaining_terminals = [t for t in all_terminals if t not in terminal_positions]
+    parent_to_terms = {}
+    for term_id in remaining_terminals:
+        parents = [
+            e.dst
+            for e in st.session_state.sim.graph.out_edges.get(term_id, [])
+            if e.type == LinkType.SUB
+        ]
+        parent_id = parents[0] if parents else None
+        parent_to_terms.setdefault(parent_id, []).append(term_id)
 
-    if remaining_terminals:
-        # Spread remaining terminals across available space
-        xs = np.linspace(-1.5, 1.5, num=len(remaining_terminals))
-        for x, n in zip(xs, remaining_terminals):
-            pos[n] = (float(x), 0.8)  # Slightly lower for auto-generated terminals
+    for parent_id, terms in parent_to_terms.items():
+        if not terms:
+            continue
+        if parent_id in pos:
+            parent_x, _ = pos[parent_id]
+            xs = np.linspace(-0.8, 0.8, num=len(terms)) if len(terms) > 1 else [0.0]
+            for dx, n in zip(xs, terms):
+                pos[n] = (float(parent_x + dx), 0.9)
+        else:
+            # Place unparented terms along bottom
+            xs = np.linspace(-1.5, 1.5, num=len(terms))
+            for x, n in zip(xs, terms):
+                pos[n] = (float(x), 0.8)
 
     # Add nodes with enhanced styling
     for node_id, graph_unit in st.session_state.sim.graph.units.items():
@@ -647,12 +674,10 @@ with col_graph:
     ax_graph.axis("off")
 
     # Animated message arrows on the graph
-    # Draw message arrows between units for the current time step
-    if (
-        st.session_state.sim.message_history
-        and len(st.session_state.sim.message_history) > timeline_idx
-    ):
-        messages = st.session_state.sim.message_history[timeline_idx]
+    # Show messages that led into this state (previous step -> current)
+    if st.session_state.sim.message_history:
+        msg_index = max(0, min(len(st.session_state.sim.message_history) - 1, max(0, timeline_idx - 1)))
+        messages = st.session_state.sim.message_history[msg_index]
 
         # Define arrow styles for different message types
         arrow_styles = {
@@ -769,17 +794,20 @@ with col_graph:
                     )
 
     # Message summary panel
-    ax_msgs.set_title("Message Summary (Last Step)")
+    try:
+        t_now = int(current_snap["t"]) if isinstance(current_snap.get("t", 0), (int, float)) else 0
+    except Exception:
+        t_now = 0
+    step_title = f"Message Summary (Step t={max(0, t_now-1)} → t={t_now})"
+    ax_msgs.set_title(step_title)
     ax_msgs.set_xlim(0, 10)
     ax_msgs.set_ylim(0, 10)
     ax_msgs.axis("off")
 
-    # Show message counts and recent activity
-    if (
-        st.session_state.sim.message_history
-        and len(st.session_state.sim.message_history) > timeline_idx
-    ):
-        messages = st.session_state.sim.message_history[timeline_idx]
+    # Show message counts and recent activity for the same previous step
+    if st.session_state.sim.message_history:
+        msg_index = max(0, min(len(st.session_state.sim.message_history) - 1, max(0, timeline_idx - 1)))
+        messages = st.session_state.sim.message_history[msg_index]
 
         # Message type counts
         msg_counts = {}
@@ -857,7 +885,7 @@ if selected_unit:
         st.metric("Unit", selected_unit)
     with col_state:
         state_color = {
-            "INACTIVE": "🟢",
+            "INACTIVE": "⚪",
             "REQUESTED": "🔵",
             "WAITING": "🟡",
             "ACTIVE": "🟣",
@@ -937,6 +965,8 @@ for summary_unit_id, unit_data_dict in current_snap["units"].items():
         }
     )
 
+# Stable order for readability
+unit_data.sort(key=lambda r: r["Unit"])
 st.dataframe(unit_data, use_container_width=True)
 
 # Status summary
