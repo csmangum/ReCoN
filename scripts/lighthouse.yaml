@@ -1,0 +1,20 @@
+object: lighthouse
+children:
+  - id: body
+    type: AND
+    parts: [t_mean]
+  - id: cap
+    type: AND
+    parts: [t_horz]
+  - id: beam
+    type: OR
+    parts: [t_horz, t_vert]
+  - id: door
+    type: AND
+    parts: [t_mean]
+sequence:
+  - body
+  - cap
+  - beam
+  - door
+

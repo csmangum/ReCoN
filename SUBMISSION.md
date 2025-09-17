@@ -177,6 +177,58 @@ The implementation prioritizes pedagogical value over optimization:
 
 These design choices create a system that's easier to understand, debug, and extend than raw performance would allow, making it ideal for research and education while still demonstrating practical active perception capabilities.
 
+## Differences vs Original Paper (What, Why, Benefit)
+
+- **Four-phase update cycle**
+  - What: Split the paper’s processing into Propagation → State Update → Message Delivery → Second Message Processing.
+  - Why: Remove race conditions and make within-step causality explicit and deterministic.
+  - Benefit: Reproducible traces and easier debugging; defensible 4-phase variant mapped to the paper’s single processing phase.
+
+- **Deterministic iteration order**
+  - What: Sorted processing of units/messages (configurable).
+  - Why: Ensure identical behavior across runs/platforms.
+  - Benefit: Stable demos/tests; clear, comparable experiments.
+
+- **Declarative YAML → graph compiler**
+  - What: Compile `scripts/*.yaml` into SUB/SUR hierarchies and POR/RET sequences.
+  - Why: Separate authoring from execution; speed up iteration.
+  - Benefit: Readable scripts, reuse of parts, quick scenario swaps (house/barn).
+
+- **Configurable confirmation ratio and edge weights**
+  - What: Parameterize AND/OR behavior via `confirmation_ratio` and weighted children.
+  - Why: Explore structural logic without code changes.
+  - Benefit: Flexible modeling; clearer ablations.
+
+- **RET feedback toggle**
+  - What: Option to let failed successors demote confirmed predecessors.
+  - Why: Control temporal coupling strength.
+  - Benefit: Compare strict vs. permissive sequencing behaviors.
+
+- **Lightweight synthetic perception + optional autoencoder**
+  - What: Simple filters/geometric features with optional denoising AE features.
+  - Why: Prioritize clarity/speed over heavy CV.
+  - Benefit: Real-time demos and interpretable evidence signals.
+
+- **Metrics and instrumentation**
+  - What: Request counts, first-step timings, convenience metrics.
+  - Why: Quantify “active” efficiency and progress.
+  - Benefit: Measurable improvements; easier analysis.
+
+- **Comprehensive graph validation + health scoring**
+  - What: Cycle, link-consistency, relationships, integrity, performance analysis.
+  - Why: Prevent invalid graphs and surface bottlenecks.
+  - Benefit: Robustness and actionable feedback during authoring.
+
+- **GraphML export and Streamlit UI**
+  - What: Export to external tools; interactive visualization of states/messages.
+  - Why: Improve interpretability and presentation.
+  - Benefit: Clear causal narratives for teaching, demos, and debugging.
+
+- **CLI workflow and tests**
+  - What: Reproducible CLI runs and a test suite.
+  - Why: Reliability and CI friendliness.
+  - Benefit: Confidence to extend/modify without regressions.
+
 ## Dataset & Terminals
 
 - Synthetic scenes from `perception/dataset.py` (size, noise, occlusion, variations).
