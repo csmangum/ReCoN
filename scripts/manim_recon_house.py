@@ -23,6 +23,7 @@ from manim import (
     BLUE,
     DOWN,
     GREEN,
+    RED,
     UP,
     WHITE,
     YELLOW,
@@ -50,6 +51,7 @@ from perception.terminals import terminals_from_image
 from recon_core.enums import LinkType, State, UnitType
 from recon_core.graph import Edge, Graph, Unit
 from manim_common import NodeViz, edge_arrow, gradient_edge_arrow, BaseReconScene
+from recon_core.engine import Engine, EngineConfig
 
 # ---------- Helpers to construct the demo graph and run steps ----------
 
@@ -94,6 +96,51 @@ def init_terminals_from_image(g: Graph, img: np.ndarray) -> Dict[str, float]:
 
 
 # ---------- Scenes ----------
+
+
+def _simulate_and_capture_messages(g: Graph, steps: int = 8) -> List[dict]:
+    """Run the engine for a few steps and capture delivered messages with timestamps."""
+    eng = Engine(g, EngineConfig())
+    captured: List[dict] = []
+
+    original_send = eng.send_message
+
+    def recording_send(sender_id: str, receiver_id: str, message):
+        # Record each delivered message with time and names
+        try:
+            msg_name = message.name
+        except AttributeError:
+            msg_name = str(message)
+        captured.append({
+            "t": eng.t,
+            "sender": sender_id,
+            "receiver": receiver_id,
+            "message": msg_name,
+        })
+        original_send(sender_id, receiver_id, message)
+
+    # Monkey-patch engine send to record
+    eng.send_message = recording_send  # type: ignore
+    eng.step(steps)
+    return captured
+
+
+def _group_messages_by_time(captured: List[dict]) -> Dict[int, List[dict]]:
+    grouped: Dict[int, List[dict]] = {}
+    for m in captured:
+        t = int(m.get("t", 0))
+        grouped.setdefault(t, []).append(m)
+    return dict(sorted(grouped.items(), key=lambda kv: kv[0]))
+
+
+def _color_for_message(msg_name: str):
+    if msg_name == "REQUEST":
+        return YELLOW
+    if msg_name == "CONFIRM":
+        return GREEN
+    if msg_name in ("INHIBIT_REQUEST", "INHIBIT_CONFIRM"):
+        return RED
+    return WHITE
 
 
 class RootActivationScene(BaseReconScene):
@@ -409,33 +456,29 @@ class HouseWalkthrough(BaseReconScene):
         self.wait(2.0)
 
 
-# ---------- New Scene: House hypothesis on a Castle image ----------
-
-
 class HouseHypothesisOnCastle(BaseReconScene):
-    """Run the house hypothesis graph on a castle image and animate actual messages/outcomes."""
+    """Accurate message animation by simulating the engine on a castle image."""
 
     def construct(self):
-        # Title card
-        title = Text("House Hypothesis on Castle", font_size=32)
-        subtitle = Text("Accurate messages from house graph on castle image", font_size=22)
-        subtitle.next_to(title, DOWN)
-        self.play(FadeIn(title), FadeIn(subtitle), run_time=1.2)
-        self.wait(0.8)
-        self.play(FadeOut(title), FadeOut(subtitle), run_time=0.8)
-
         # 1) Castle image on the left
         img = make_castle_scene(size=64, noise=0.05)
         pil_arr = (np.clip(img, 0.0, 1.0) * 255).astype(np.uint8)
         castle = ImageMobject(pil_arr).scale(5.5)
         castle.move_to([-4.5, -0.5, 0])
+
+        # Title
+        title = Text("House Hypothesis on Castle", font_size=30)
+        subtitle = Text("True engine messages", font_size=20)
+        subtitle.next_to(title, DOWN)
+        self.play(FadeIn(title), FadeIn(subtitle), run_time=1.0)
+        self.wait(0.4)
+        self.play(FadeOut(title), FadeOut(subtitle), run_time=0.6)
         self.play(FadeIn(castle), run_time=1.0)
 
-        # 2) Build the same house hypothesis graph and initialize terminals from castle image
+        # 2) House graph on the right, initialized from castle terminals
         g = build_house_graph()
-        feats = init_terminals_from_image(g, img)
+        init_terminals_from_image(g, img)
 
-        # Layout positions (mirrors house scenes)
         right_x = 2.0
         y_root = 1.5
         spread = 3.0
@@ -450,154 +493,32 @@ class HouseHypothesisOnCastle(BaseReconScene):
         }
 
         nodes, node_group = self.build_nodes(g, node_positions)
-        self.play(FadeIn(node_group), run_time=2.0, rate_func=rf.ease_in_out_sine)
+        self.play(FadeIn(node_group), run_time=1.2)
 
         background_edges, sur_edges, sub_edges, por_edges = self.compute_edges(g, nodes)
-
         for edge in background_edges:
             edge.set_z_index(-1)
-        self.play(*[FadeIn(m) for m in background_edges], lag_ratio=0.02, run_time=1.6)
+        self.play(*[FadeIn(m) for m in background_edges], lag_ratio=0.02, run_time=1.0)
 
-        # 3) Highlight root activation
-        root_node = nodes["u_root"]
-        root_highlight = self.create_highlight_shape(root_node, YELLOW, stroke_width=4)
-        root_highlight.move_to(root_node.shape.get_center())
-        self.play(
-            FadeIn(root_highlight),
-            root_node.shape.animate.set_fill(YELLOW, opacity=0.3),
-            run_time=0.8,
-        )
-        activation_text = Text("ACTIVATED", font_size=16, color=YELLOW)
-        activation_text.next_to(root_node.shape, UP, buff=0.2)
-        self.play(FadeIn(activation_text), run_time=0.4)
+        # 3) Simulate engine and capture real messages
+        captured = _simulate_and_capture_messages(g, steps=8)
+        grouped = _group_messages_by_time(captured)
 
-        # 4) Requests from root to child scripts (SUR concept)
-        message_anims = []
-        for src_id, dst_id in sur_edges:
-            if src_id == "u_root":
-                message_anims.append(
-                    self.animate_message_between_nodes(nodes[src_id], nodes[dst_id], "REQUEST", YELLOW, 1.0)
-                )
-        if message_anims:
-            self.play(*message_anims, run_time=1.6)
+        # 4) Animate per-step message batches
+        for _, msgs in grouped.items():
+            anims = []
+            for m in msgs:
+                s = m.get("sender")
+                r = m.get("receiver")
+                msg_name = str(m.get("message"))
+                if s in nodes and r in nodes:
+                    color = _color_for_message(msg_name)
+                    anims.append(self.animate_message_between_nodes(nodes[s], nodes[r], msg_name, color, 0.9))
+            if anims:
+                self.play(*anims, run_time=1.4)
+                self.wait(0.1)
 
-        # Child scripts become ACTIVE
-        active_animations = []
-        for script_id in ["u_roof", "u_body", "u_door"]:
-            active_animations.append(nodes[script_id].shape.animate.set_fill(BLUE, opacity=0.3))
-        self.play(*active_animations, run_time=0.6)
-        active_labels = []
-        for script_id in ["u_roof", "u_body", "u_door"]:
-            lbl = Text("ACTIVE", font_size=12, color=BLUE)
-            lbl.next_to(nodes[script_id].shape, UP, buff=0.1)
-            active_labels.append(lbl)
-        self.play(*[FadeIn(l) for l in active_labels], run_time=0.4)
-
-        # 5) Requests from scripts to terminals (conceptual)
-        term_request_anims = []
-        term_request_anims.append(
-            self.animate_message_between_nodes(nodes["u_roof"], nodes["t_horz"], "REQUEST", YELLOW, 0.9)
-        )
-        term_request_anims.append(
-            self.animate_message_between_nodes(nodes["u_body"], nodes["t_mean"], "REQUEST", YELLOW, 0.9)
-        )
-        term_request_anims.append(
-            self.animate_message_between_nodes(nodes["u_door"], nodes["t_vert"], "REQUEST", YELLOW, 0.9)
-        )
-        term_request_anims.append(
-            self.animate_message_between_nodes(nodes["u_door"], nodes["t_mean"], "REQUEST", YELLOW, 0.9)
-        )
-        self.play(*term_request_anims, run_time=1.4)
-
-        # 6) Terminals that actually evaluate TRUE on the castle
-        self.wait(0.3)
-        true_terms = []
-        for tid in ["t_horz", "t_mean", "t_vert"]:
-            if g.units[tid].a >= g.units[tid].thresh:
-                true_terms.append(tid)
-
-        true_fill_anims = []
-        true_labels = []
-        for tid in true_terms:
-            true_fill_anims.append(nodes[tid].shape.animate.set_fill(GREEN, opacity=0.4))
-            lbl = Text("TRUE", font_size=10, color=GREEN)
-            lbl.next_to(nodes[tid].shape, DOWN, buff=0.1)
-            true_labels.append(lbl)
-        if true_fill_anims:
-            self.play(*true_fill_anims, run_time=0.6)
-            self.play(*[FadeIn(l) for l in true_labels], run_time=0.3)
-
-        # 7) CONFIRM messages from TRUE terminals back to their scripts
-        confirm_anims = []
-        if "t_horz" in true_terms:
-            confirm_anims.append(self.animate_message_between_nodes(nodes["t_horz"], nodes["u_roof"], "CONFIRM", GREEN, 0.8))
-        if "t_mean" in true_terms:
-            confirm_anims.append(self.animate_message_between_nodes(nodes["t_mean"], nodes["u_body"], "CONFIRM", GREEN, 0.8))
-            confirm_anims.append(self.animate_message_between_nodes(nodes["t_mean"], nodes["u_door"], "CONFIRM", GREEN, 0.8))
-        if "t_vert" in true_terms:
-            confirm_anims.append(self.animate_message_between_nodes(nodes["t_vert"], nodes["u_door"], "CONFIRM", GREEN, 0.8))
-        if confirm_anims:
-            self.play(*confirm_anims, run_time=1.2)
-
-        # 8) Scripts that become CONFIRMED based on child TRUEs (confirmation_ratio ~0.6)
-        script_children = {
-            "u_roof": ["t_horz"],
-            "u_body": ["t_mean"],
-            "u_door": ["t_vert", "t_mean"],
-        }
-        confirmed_scripts = []
-        new_labels = []
-        confirm_script_anims = []
-        for idx, sid in enumerate(["u_roof", "u_body", "u_door"]):
-            children = script_children[sid]
-            need = max(1, int(0.6 * len(children)))
-            trues = sum(1 for c in children if c in true_terms)
-            if children and trues >= need:
-                confirmed_scripts.append(sid)
-                confirm_script_anims.append(nodes[sid].shape.animate.set_fill(GREEN, opacity=0.5))
-                lbl = Text("CONFIRMED", font_size=10, color=GREEN)
-                lbl.move_to(active_labels[idx].get_center())
-                new_labels.append((idx, lbl))
-
-        if confirm_script_anims:
-            self.play(*confirm_script_anims, run_time=0.6)
-            if new_labels:
-                self.play(
-                    *[FadeOut(active_labels[i]) for (i, _) in new_labels],
-                    *[FadeIn(lbl) for (_, lbl) in new_labels],
-                    run_time=0.4,
-                )
-
-        # 9) CONFIRM messages from confirmed scripts to root
-        root_confirm_anims = []
-        for sid in confirmed_scripts:
-            root_confirm_anims.append(self.animate_message_between_nodes(nodes[sid], nodes["u_root"], "CONFIRM", GREEN, 1.0))
-        if root_confirm_anims:
-            self.play(*root_confirm_anims, run_time=1.2)
-
-        # 10) Root confirmation depends on number of confirmed scripts
-        child_scripts = ["u_roof", "u_body", "u_door"]
-        need_root = max(1, int(0.6 * len(child_scripts)))
-        if len(confirmed_scripts) >= need_root:
-            root_confirmed_fill = nodes["u_root"].shape.animate.set_fill(GREEN, opacity=0.6)
-            root_confirmed_label = Text("CONFIRMED", font_size=12, color=GREEN)
-            root_confirmed_label.move_to(activation_text.get_center())
-            self.play(
-                FadeOut(activation_text),
-                FadeIn(root_confirmed_label),
-                root_confirmed_fill,
-                run_time=0.7,
-            )
-        else:
-            # Keep root ACTIVE if insufficient confirmations
-            root_active_label = Text("ACTIVE", font_size=12, color=BLUE)
-            root_active_label.move_to(activation_text.get_center())
-            self.play(
-                FadeOut(activation_text),
-                FadeIn(root_active_label),
-                run_time=0.5,
-            )
-
+        # Freeze last frame
         self.wait(1.6)
 
 # README (rendering notes):
