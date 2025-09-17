@@ -321,7 +321,7 @@ with st.sidebar:
             ae_epochs = st.number_input(
                 "AE epochs", min_value=1, max_value=200, value=10, step=1
             )
-            if st.button("Train AE", use_container_width=True):
+            if st.button("Train AE", width="stretch"):
                 # Validate epochs value before setting environment variable
                 if isinstance(ae_epochs, (int, float)) and 1 <= ae_epochs <= 200:
                     os.environ["RECON_TRAIN_AE_EPOCHS"] = str(int(ae_epochs))
@@ -334,7 +334,7 @@ with st.sidebar:
             cnn_epochs = st.number_input(
                 "CNN epochs", min_value=1, max_value=200, value=5, step=1
             )
-            if st.button("Train CNN", use_container_width=True):
+            if st.button("Train CNN", width="stretch"):
                 # Validate epochs value before setting environment variable
                 if isinstance(cnn_epochs, (int, float)) and 1 <= cnn_epochs <= 200:
                     os.environ["RECON_TRAIN_CNN_EPOCHS"] = str(int(cnn_epochs))
@@ -345,13 +345,13 @@ with st.sidebar:
 
     col_scene_gen, col_scene_reset = st.columns(2)
     with col_scene_gen:
-        if st.button("🎲 Generate Scene", type="primary", use_container_width=True):
+        if st.button("🎲 Generate Scene", type="primary", width="stretch"):
             img, terminal_vals = st.session_state.sim.generate_scene(feature_source)
             st.session_state.img = img
             st.session_state.tvals = terminal_vals
             st.session_state.snap = st.session_state.sim.engine.snapshot()
     with col_scene_reset:
-        if st.button("🔄 Reset", use_container_width=True):
+        if st.button("🔄 Reset", width="stretch"):
             st.session_state.snap = st.session_state.sim.reset_simulation()
 
     st.divider()
@@ -360,11 +360,11 @@ with st.sidebar:
     st.caption("Playback")
     col_step, col_runpause = st.columns(2)
     with col_step:
-        if st.button("⏭️ Step", use_container_width=True):
+        if st.button("⏭️ Step", width="stretch"):
             st.session_state.snap = st.session_state.sim.step_simulation(1)
     with col_runpause:
         run_label = "▶️ Run" if not st.session_state.sim.is_running else "⏸️ Pause"
-        if st.button(run_label, type="primary", use_container_width=True):
+        if st.button(run_label, type="primary", width="stretch"):
             st.session_state.sim.is_running = not st.session_state.sim.is_running
 
     speed_choice = st.select_slider(
@@ -492,7 +492,7 @@ with col_scene:
     ax_bars.grid(True, alpha=0.3)
 
     plt.tight_layout()
-    st.pyplot(fig, use_container_width=True)
+    st.pyplot(fig, width="stretch")
 
     # Scene info
     # Show live terminal activations from current graph
@@ -860,7 +860,7 @@ with col_graph:
                     )
                     y_pos -= 0.6
 
-    st.pyplot(fig, use_container_width=True)
+    st.pyplot(fig, width="stretch")
 
 # Unit Details and Hover Information
 st.subheader("📊 Unit Details & Hover Information")
@@ -962,7 +962,7 @@ for summary_unit_id, unit_data_dict in current_snap["units"].items():
 
 # Stable order for readability
 unit_data.sort(key=lambda r: r["Unit"])
-st.dataframe(unit_data, use_container_width=True)
+st.dataframe(unit_data, width="stretch")
 
 # Status summary
 col_status1, col_status2, col_status3 = st.columns(3)
