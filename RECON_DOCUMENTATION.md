@@ -550,6 +550,61 @@ for node, attrs in imported.nodes(data=True):
     print(f"Unit {node}: {attrs['kind']} in state {attrs['state']}")
 ```
 
+## CLI Reference
+
+The repository provides a flexible command-line interface in `scripts/recon_cli.py` for compiling YAML scenes, running simulations, validating graphs, exporting to GraphML, and inspecting graph statistics.
+
+### Quickstart
+
+```bash
+PYTHONPATH=. python3 scripts/recon_cli.py --version
+PYTHONPATH=. python3 scripts/recon_cli.py -h
+PYTHONPATH=. python3 scripts/recon_cli.py --list-scenes
+```
+
+### Common Commands
+
+```bash
+# Compile only (no simulation)
+PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --dry-run
+
+# Run for N steps and print snapshot summary
+PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --steps 5 --deterministic --ret-feedback
+
+# Override key engine parameters
+PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --sur 0.25 --por 0.6 --confirm-ratio 0.7
+
+# Write snapshot summary to a JSON file
+PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --steps 10 --out snapshot.json
+
+# Validate graph (non-zero exit on errors). Use --strict-activation to enforce bounds.
+PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --validate --strict-activation
+
+# Print statistics and health score
+PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --stats
+
+# Export GraphML for external tools
+PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --export-graphml house.graphml --dry-run
+```
+
+### Flags
+
+- `--version`: Print package version.
+- `-v/--verbose`: Increase logging verbosity (repeat for debug).
+- `--list-scenes`: List bundled sample YAML files.
+- `yaml` (positional): Path to YAML scene file.
+- `--steps N`: Number of engine steps to run.
+- `--dry-run`: Compile without stepping the engine.
+- `--out FILE`: Write JSON output to file.
+- `--sur/--por/--ret/--sub`: Override positive gate values.
+- `--confirm-ratio`: Override script confirmation ratio.
+- `--deterministic`: Deterministic processing order.
+- `--ret-feedback`: Enable RET-driven feedback in state updates.
+- `--validate`: Run comprehensive validations and summarize issues.
+- `--strict-activation`: Treat activation/threshold bound violations as errors.
+- `--stats`: Print graph statistics and health score.
+- `--export-graphml FILE`: Export compiled graph to GraphML.
+
 ## House Recognition Example
 
 ### Network Topology
