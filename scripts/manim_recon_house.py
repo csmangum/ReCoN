@@ -83,6 +83,42 @@ def build_house_graph() -> Graph:
     return g
 
 
+def build_castle_graph() -> Graph:
+    """Build a castle graph based on castle.yaml configuration."""
+    g = Graph()
+    
+    # Root castle script
+    g.add_unit(Unit("u_root", UnitType.SCRIPT))
+    
+    # Castle component scripts
+    for uid in ["u_wall", "u_crenellations", "u_towers", "u_gate"]:
+        g.add_unit(Unit(uid, UnitType.SCRIPT))
+    
+    # Terminals (same as house for compatibility)
+    for tid in ["t_mean", "t_vert", "t_horz"]:
+        g.add_unit(Unit(tid, UnitType.TERMINAL, thresh=0.5))
+
+    # Evidence links (SUB) - based on castle.yaml parts
+    g.add_edge(Edge("t_mean", "u_wall", LinkType.SUB, w=1.0))
+    g.add_edge(Edge("t_horz", "u_crenellations", LinkType.SUB, w=1.0))
+    g.add_edge(Edge("t_vert", "u_towers", LinkType.SUB, w=1.0))
+    # Gate uses OR logic with both mean and vert
+    g.add_edge(Edge("t_mean", "u_gate", LinkType.SUB, w=0.7))
+    g.add_edge(Edge("t_vert", "u_gate", LinkType.SUB, w=0.7))
+
+    # Hierarchy SUR and child SUB back to root
+    for child in ["u_wall", "u_crenellations", "u_towers", "u_gate"]:
+        g.add_edge(Edge("u_root", child, LinkType.SUR, w=1.0))
+        g.add_edge(Edge(child, "u_root", LinkType.SUB, w=1.0))
+
+    # Sequence POR: wall -> towers -> crenellations -> gate
+    g.add_edge(Edge("u_wall", "u_towers", LinkType.POR, w=1.0))
+    g.add_edge(Edge("u_towers", "u_crenellations", LinkType.POR, w=1.0))
+    g.add_edge(Edge("u_crenellations", "u_gate", LinkType.POR, w=1.0))
+    
+    return g
+
+
 def init_terminals_from_image(g: Graph, img: np.ndarray) -> Dict[str, float]:
     feats = terminals_from_image(img)
     for tid, val in feats.items():
@@ -645,6 +681,440 @@ class HouseHypothesisOnCastle(BaseReconScene):
 
         # Freeze last frame
         self.wait(1.6)
+
+
+class CastleActivationScene(BaseReconScene):
+    """Scene showing castle root node activation and message propagation."""
+
+    def construct(self):
+        # Title card
+        title = Text("Request Confirmation Network", font_size=32)
+        subtitle = Text("Active Perception on a Synthetic Castle", font_size=22)
+        subtitle.next_to(title, DOWN)
+        self.play(FadeIn(title), FadeIn(subtitle), run_time=0.6)
+        self.wait(1.0)
+        self.play(FadeOut(title), FadeOut(subtitle), run_time=0.6)
+
+        # 1) Castle image on the left
+        img = make_castle_scene(size=64, noise=0.05)
+        pil_arr = (np.clip(img, 0.0, 1.0) * 255).astype(np.uint8)
+        castle = ImageMobject(pil_arr).scale(5.5)
+        castle.move_to([-4.5, -0.5, 0])
+        self.play(FadeIn(castle), run_time=1.0)
+
+        # Add castle title
+        castle_title = Text("Synthetic Castle", font_size=24, color=WHITE)
+        castle_title.next_to(castle, UP, buff=0.3)
+        self.play(FadeIn(castle_title), run_time=0.5)
+
+        # Add descriptive text above the scene
+        description_text = Text(
+            "Initializing castle network structure...", font_size=20, color=WHITE
+        )
+        description_text.to_edge(UP, buff=0.5)
+        self.play(FadeIn(description_text), run_time=0.5)
+
+        # 2) Build castle network viz on the right
+        g = build_castle_graph()
+
+        # Node layout positions (centered on right two-thirds)
+        right_x = 2.0
+        y_root = 1.5
+        spread = 2.5
+        node_positions = {
+            "u_root": (right_x, y_root, 0),
+            "u_wall": (right_x - spread, y_root - 1.5, 0),
+            "u_towers": (right_x - spread/2, y_root - 1.5, 0),
+            "u_crenellations": (right_x + spread/2, y_root - 1.5, 0),
+            "u_gate": (right_x + spread, y_root - 1.5, 0),
+            "t_horz": (right_x - spread, y_root - 3.5, 0),
+            "t_mean": (right_x - spread/2, y_root - 3.5, 0),
+            "t_vert": (right_x + spread/2, y_root - 3.5, 0),
+        }
+
+        nodes, node_group = self.build_nodes(g, node_positions)
+        self.play(FadeIn(node_group), run_time=2.0, rate_func=rf.ease_in_out_sine)
+
+        # Add "Castle Hypothesis" title above the root node
+        root_hypothesis_title = Text("Castle Hypothesis", font_size=20, color=WHITE)
+        root_hypothesis_title.next_to(nodes["u_root"].shape, UP, buff=0.4)
+        self.play(FadeIn(root_hypothesis_title), run_time=0.5)
+
+        # Update description text
+        new_description = Text(
+            "Castle network nodes created - Root, Components, and Terminals",
+            font_size=20,
+            color=WHITE,
+        )
+        new_description.to_edge(UP, buff=0.5)
+        self.play(FadeOut(description_text), FadeIn(new_description), run_time=0.5)
+        description_text = new_description
+
+        background_edges, sur_edges, sub_edges, por_edges = self.compute_edges(g, nodes)
+
+        # Draw background edges first (behind nodes)
+        for edge in background_edges:
+            edge.set_z_index(-1)
+        self.play(*[FadeIn(m) for m in background_edges], lag_ratio=0.02, run_time=2.0)
+
+        # Update description text
+        new_description = Text(
+            "Network connections established - SUR, SUB, and POR links",
+            font_size=20,
+            color=WHITE,
+        )
+        new_description.to_edge(UP, buff=0.5)
+        self.play(FadeOut(description_text), FadeIn(new_description), run_time=0.5)
+        description_text = new_description
+
+        # Wait a moment to show the network
+        self.wait(1.0)
+
+        # 3) Show root node activation
+        root_node = nodes["u_root"]
+
+        # Update description text
+        new_description = Text(
+            "Root node activation - Starting castle perception process",
+            font_size=20,
+            color=YELLOW,
+        )
+        new_description.to_edge(UP, buff=0.5)
+        self.play(FadeOut(description_text), FadeIn(new_description), run_time=0.5)
+        description_text = new_description
+
+        # Highlight the root node activation with color change
+        root_highlight = self.create_highlight_shape(root_node, YELLOW, stroke_width=4)
+        root_highlight.move_to(root_node.shape.get_center())
+
+        self.play(
+            FadeIn(root_highlight),
+            root_node.shape.animate.set_fill(YELLOW, opacity=0.3),
+            run_time=1.0,
+        )
+
+        # Add activation text
+        activation_text = Text("ACTIVATED", font_size=16, color=YELLOW)
+        activation_text.next_to(root_node.shape, UP, buff=0.2)
+        self.play(FadeIn(activation_text), run_time=0.5)
+
+        self.wait(0.5)
+
+        # 4) Animate REQUEST messages moving to children
+        # The SUR edges are: u_root -> u_wall, u_root -> u_towers, u_root -> u_crenellations, u_root -> u_gate
+
+        # Update description text
+        new_description = Text(
+            "Sending REQUEST messages to castle components", font_size=20, color=YELLOW
+        )
+        new_description.to_edge(UP, buff=0.5)
+        self.play(FadeOut(description_text), FadeIn(new_description), run_time=0.5)
+        description_text = new_description
+
+        message_animations = []
+        for src_id, dst_id in sur_edges:
+            if src_id == "u_root":
+                anim = self.animate_message_between_nodes(
+                    nodes[src_id], nodes[dst_id], "REQUEST", YELLOW, 1.2
+                )
+                message_animations.append(anim)
+
+        # Play all message animations in parallel
+        self.play(*message_animations, run_time=2.5)
+
+        # 5) Show castle components becoming ACTIVE and sending requests to terminals
+        self.wait(1.0)
+
+        # Update description text
+        new_description = Text(
+            "Castle components become ACTIVE and request terminal data",
+            font_size=20,
+            color=BLUE,
+        )
+        new_description.to_edge(UP, buff=0.5)
+        self.play(FadeOut(description_text), FadeIn(new_description), run_time=0.5)
+        description_text = new_description
+
+        # Castle components transition to ACTIVE
+        active_animations = []
+        for script_id in ["u_wall", "u_towers", "u_crenellations", "u_gate"]:
+            script_node = nodes[script_id]
+            # Change color to indicate ACTIVE state
+            active_animations.append(
+                script_node.shape.animate.set_fill(BLUE, opacity=0.3)
+            )
+
+        self.play(*active_animations, run_time=0.8)
+
+        # Add ACTIVE labels
+        active_labels = []
+        for script_id in ["u_wall", "u_towers", "u_crenellations", "u_gate"]:
+            script_node = nodes[script_id]
+            active_label = Text("ACTIVE", font_size=10, color=BLUE)
+            active_label.next_to(script_node.shape, UP, buff=0.1)
+            active_labels.append(active_label)
+
+        self.play(*[FadeIn(label) for label in active_labels], run_time=0.5)
+
+        # 6) Send REQUEST messages from components to their terminals
+        self.wait(0.5)
+
+        terminal_request_animations = []
+
+        # Wall script -> mean terminal
+        wall_to_mean = self.animate_message_between_nodes(
+            nodes["u_wall"], nodes["t_mean"], "REQUEST", YELLOW, 1.2
+        )
+        terminal_request_animations.append(wall_to_mean)
+
+        # Towers script -> vertical terminal
+        towers_to_vert = self.animate_message_between_nodes(
+            nodes["u_towers"], nodes["t_vert"], "REQUEST", YELLOW, 1.2
+        )
+        terminal_request_animations.append(towers_to_vert)
+
+        # Crenellations script -> horizontal terminal
+        crenellations_to_horz = self.animate_message_between_nodes(
+            nodes["u_crenellations"], nodes["t_horz"], "REQUEST", YELLOW, 1.2
+        )
+        terminal_request_animations.append(crenellations_to_horz)
+
+        # Gate script -> both mean and vertical terminals (OR logic)
+        gate_to_mean = self.animate_message_between_nodes(
+            nodes["u_gate"], nodes["t_mean"], "REQUEST", YELLOW, 1.2
+        )
+        terminal_request_animations.append(gate_to_mean)
+        
+        gate_to_vert = self.animate_message_between_nodes(
+            nodes["u_gate"], nodes["t_vert"], "REQUEST", YELLOW, 1.2
+        )
+        terminal_request_animations.append(gate_to_vert)
+
+        self.play(*terminal_request_animations, run_time=2.0)
+
+        # 7) Terminals detect features and send CONFIRM messages back
+        self.wait(1.0)
+
+        # Update description text
+        new_description = Text(
+            "Terminals detect features and become TRUE", font_size=20, color=GREEN
+        )
+        new_description.to_edge(UP, buff=0.5)
+        self.play(FadeOut(description_text), FadeIn(new_description), run_time=0.5)
+        description_text = new_description
+
+        # Terminals become TRUE (detect features)
+        terminal_true_animations = []
+        for term_id in ["t_horz", "t_mean", "t_vert"]:
+            term_node = nodes[term_id]
+            terminal_true_animations.append(
+                term_node.shape.animate.set_fill(GREEN, opacity=0.4)
+            )
+
+        self.play(*terminal_true_animations, run_time=0.8)
+
+        # Add TRUE labels to terminals
+        true_labels = []
+        for term_id in ["t_horz", "t_mean", "t_vert"]:
+            term_node = nodes[term_id]
+            true_label = Text("TRUE", font_size=10, color=GREEN)
+            true_label.next_to(term_node.shape, DOWN, buff=0.1)
+            true_labels.append(true_label)
+
+        self.play(*[FadeIn(label) for label in true_labels], run_time=0.5)
+
+        # Send CONFIRM messages back to scripts
+        self.wait(0.5)
+
+        # Update description text
+        new_description = Text(
+            "Terminals send CONFIRM messages back to components", font_size=20, color=GREEN
+        )
+        new_description.to_edge(UP, buff=0.5)
+        self.play(FadeOut(description_text), FadeIn(new_description), run_time=0.5)
+        description_text = new_description
+
+        confirm_animations = []
+
+        # Mean terminal -> wall script
+        mean_to_wall = self.animate_message_between_nodes(
+            nodes["t_mean"], nodes["u_wall"], "CONFIRM", GREEN, 1.0
+        )
+        confirm_animations.append(mean_to_wall)
+
+        # Vertical terminal -> towers script
+        vert_to_towers = self.animate_message_between_nodes(
+            nodes["t_vert"], nodes["u_towers"], "CONFIRM", GREEN, 1.0
+        )
+        confirm_animations.append(vert_to_towers)
+
+        # Horizontal terminal -> crenellations script
+        horz_to_crenellations = self.animate_message_between_nodes(
+            nodes["t_horz"], nodes["u_crenellations"], "CONFIRM", GREEN, 1.0
+        )
+        confirm_animations.append(horz_to_crenellations)
+
+        # Both terminals -> gate script (confirming the OR connection)
+        mean_to_gate = self.animate_message_between_nodes(
+            nodes["t_mean"], nodes["u_gate"], "CONFIRM", GREEN, 1.0
+        )
+        confirm_animations.append(mean_to_gate)
+        
+        vert_to_gate = self.animate_message_between_nodes(
+            nodes["t_vert"], nodes["u_gate"], "CONFIRM", GREEN, 1.0
+        )
+        confirm_animations.append(vert_to_gate)
+
+        self.play(*confirm_animations, run_time=1.8)
+
+        # 8) Components become CONFIRMED
+        self.wait(0.8)
+
+        # Update description text
+        new_description = Text(
+            "Castle components become CONFIRMED after receiving terminal data",
+            font_size=20,
+            color=GREEN,
+        )
+        new_description.to_edge(UP, buff=0.5)
+        self.play(FadeOut(description_text), FadeIn(new_description), run_time=0.5)
+        description_text = new_description
+
+        confirmed_animations = []
+        for script_id in ["u_wall", "u_towers", "u_crenellations", "u_gate"]:
+            script_node = nodes[script_id]
+            confirmed_animations.append(
+                script_node.shape.animate.set_fill(GREEN, opacity=0.5)
+            )
+
+        self.play(*confirmed_animations, run_time=0.8)
+
+        # Update labels to CONFIRMED
+        confirmed_labels = []
+        for i, script_id in enumerate(["u_wall", "u_towers", "u_crenellations", "u_gate"]):
+            old_label = active_labels[i]
+            confirmed_label = Text("CONFIRMED", font_size=8, color=GREEN)
+            confirmed_label.move_to(old_label.get_center())
+            confirmed_labels.append(confirmed_label)
+
+        self.play(
+            *[FadeOut(label) for label in active_labels],
+            *[FadeIn(label) for label in confirmed_labels],
+            run_time=0.6,
+        )
+
+        # 9) Components send CONFIRM messages back to root
+        self.wait(1.0)
+
+        # Update description text
+        new_description = Text(
+            "Components send CONFIRM messages back to root", font_size=20, color=GREEN
+        )
+        new_description.to_edge(UP, buff=0.5)
+        self.play(FadeOut(description_text), FadeIn(new_description), run_time=0.5)
+        description_text = new_description
+
+        # Animate all confirmations simultaneously
+        root_confirm_animations = []
+
+        # All components -> root
+        for component_id in ["u_wall", "u_towers", "u_crenellations", "u_gate"]:
+            component_to_root = self.animate_message_to_root(
+                nodes[component_id], nodes["u_root"], "CONFIRM", GREEN, 1.5
+            )
+            root_confirm_animations.append(component_to_root)
+
+        # Play all confirmations simultaneously
+        self.play(*root_confirm_animations, run_time=1.5)
+
+        # 10) Root becomes CONFIRMED after receiving all confirmations
+        self.wait(0.8)
+
+        # Update description text
+        new_description = Text(
+            "Root becomes CONFIRMED - Castle perception process complete",
+            font_size=20,
+            color=GREEN,
+        )
+        new_description.to_edge(UP, buff=0.5)
+        self.play(FadeOut(description_text), FadeIn(new_description), run_time=0.5)
+        description_text = new_description
+
+        # Highlight the root node to show it received all confirmations
+        root_highlight = self.create_highlight_shape(
+            nodes["u_root"], GREEN, stroke_width=4
+        )
+        root_highlight.move_to(nodes["u_root"].shape.get_center())
+
+        # Root transitions to CONFIRMED state
+        root_confirmed_fill = nodes["u_root"].shape.animate.set_fill(GREEN, opacity=0.6)
+        root_confirmed_label = Text("CONFIRMED", font_size=12, color=GREEN)
+        root_confirmed_label.move_to(activation_text.get_center())
+
+        self.play(
+            FadeIn(root_highlight),
+            FadeOut(activation_text),
+            FadeIn(root_confirmed_label),
+            root_confirmed_fill,
+            run_time=0.8,
+        )
+
+        # Hold the final state
+        self.wait(2.0)
+
+
+class CastleWalkthrough(BaseReconScene):
+    """Single, concise castle walkthrough scene."""
+
+    def construct(self):
+        # 1) Castle image on the left
+        img = make_castle_scene(size=64, noise=0.05)
+        # Normalize to 0..255 grayscale
+        pil_arr = (np.clip(img, 0.0, 1.0) * 255).astype(np.uint8)
+        castle = ImageMobject(pil_arr).scale(5.5)
+        castle.move_to([-4.5, -0.5, 0])  # Center on left third of screen, adjusted
+
+        # Title card
+        title = Text("Request Confirmation Network", font_size=32)
+        subtitle = Text("Active Perception on a Synthetic Castle", font_size=22)
+        subtitle.next_to(title, DOWN)
+        self.play(FadeIn(title), FadeIn(subtitle), run_time=1.5)
+        self.wait(1.0)
+        self.play(FadeOut(title), FadeOut(subtitle), run_time=1.5)
+
+        self.play(FadeIn(castle), run_time=2.0)
+
+        # 2) Build castle network viz on the right
+        g = build_castle_graph()
+        init_terminals_from_image(g, img)
+
+        # Node layout positions (centered on right two-thirds)
+        right_x = 2.0  # Center of right two-thirds
+        y_root = 1.5  # Adjusted for square terminals
+        spread = 2.5  # Spread for castle components
+        node_positions = {
+            "u_root": (right_x, y_root, 0),
+            "u_wall": (right_x - spread, y_root - 1.5, 0),
+            "u_towers": (right_x - spread/2, y_root - 1.5, 0),
+            "u_crenellations": (right_x + spread/2, y_root - 1.5, 0),
+            "u_gate": (right_x + spread, y_root - 1.5, 0),
+            "t_horz": (right_x - spread, y_root - 3.5, 0),
+            "t_mean": (right_x - spread/2, y_root - 3.5, 0),
+            "t_vert": (right_x + spread/2, y_root - 3.5, 0),
+        }
+
+        nodes, node_group = self.build_nodes(g, node_positions)
+        self.play(FadeIn(node_group), run_time=3.0, rate_func=rf.ease_in_out_sine)
+
+        background_edges, sur_edges, sub_edges, por_edges = self.compute_edges(g, nodes)
+
+        # Draw background edges first (behind nodes)
+        for edge in background_edges:
+            edge.set_z_index(-1)  # Behind nodes
+        self.play(*[FadeIn(m) for m in background_edges], lag_ratio=0.02, run_time=2.5)
+
+        # Graph is now built and displayed
+        self.wait(2.0)
 
 
 # README (rendering notes):
