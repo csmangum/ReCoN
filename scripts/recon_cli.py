@@ -21,9 +21,9 @@ from glob import glob
 from pathlib import Path
 from typing import Any, Dict, List
 
-from recon_core import Engine  # type: ignore
-from recon_core.config import EngineConfig  # type: ignore
-from recon_core.compiler import compile_from_file  # type: ignore
+from recon_core import Engine
+from recon_core.config import EngineConfig
+from recon_core.compiler import compile_from_file
 
 
 def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
@@ -139,30 +139,41 @@ def main(argv: List[str] | None = None) -> int:
     g = compile_from_file(args.yaml)
 
     # Optional validation
+    validation_results = None
+    validation_summary = None
     if args.validate or args.stats:
-        results = g.validate_all(strict_activation=args.strict_activation)
-        summary = g.get_validation_summary(results)
-        logging.info("Validation issues: %d (errors=%d warnings=%d)", summary["total_issues"], summary["errors"], summary["warnings"])
-        if args.validate and not args.stats:
-            print(json.dumps({"summary": summary, "results": results}, indent=2))
-            # Non-zero exit on errors
-            return 1 if summary["errors"] > 0 else 0
+        validation_results = g.validate_all(strict_activation=args.strict_activation)
+        validation_summary = g.get_validation_summary(validation_results)
+        logging.info(
+            "Validation issues: %d (errors=%d warnings=%d)",
+            validation_summary["total_issues"],
+            validation_summary["errors"],
+            validation_summary["warnings"],
+        )
 
-    # Optional stats
-    if args.stats:
-        stats = g.get_graph_statistics()
-        print(json.dumps(stats, indent=2))
-        # Do not step engine if stats requested without explicit run intent and dry-run
-        if args.dry_run:
-            return 0
-
-    # Optional export
+    # Optional export happens before early exits
     if args.export_graphml:
         out_path = args.export_graphml
         logging.info("Exporting GraphML to %s", out_path)
         g.export_graphml(out_path)
 
+    # Optional stats: analysis mode; do not step engine
+    if args.stats:
+        stats = g.get_graph_statistics()
+        print(json.dumps(stats, indent=2))
+        # If validation was also requested, propagate error exit code on errors
+        if args.validate and validation_summary is not None and validation_summary["errors"] > 0:
+            return 1
+        return 0
+
+    # Validation only (no stats): print and exit with appropriate code
+    if args.validate and not args.stats:
+        # validation_summary/results are guaranteed set in this branch
+        print(json.dumps({"summary": validation_summary, "results": validation_results}, indent=2))
+        return 1 if validation_summary and validation_summary["errors"] > 0 else 0
+
     if args.dry_run:
+        # Exit early if dry-run is specified since no engine execution is required
         # Provide a minimal graph summary
         minimal = {
             "units": len(g.units),

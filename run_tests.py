@@ -403,7 +403,7 @@ if __name__ == "__main__":
     # CLI smoke checks (best-effort)
     try:
         import subprocess
-        env = dict(**os.environ)
+        env = os.environ.copy()
         env.setdefault("PYTHONPATH", ".")
         print("\n=== CLI Smoke Checks ===")
         subprocess.run(["python3", "scripts/recon_cli.py", "-h"], check=True, env=env)
