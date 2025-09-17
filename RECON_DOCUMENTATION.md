@@ -41,7 +41,7 @@ Each unit maintains a **finite state machine** with 8 possible states:
 | `REQUESTED` | Unit has received a request for activation |
 | `WAITING` | Unit is waiting for dependencies or external conditions |
 | `ACTIVE` | Unit is actively processing/confirming |
-| `TRUE` | Terminal unit has detected its feature/pattern |
+| `TRUE` | Terminal unit has detected its feature/pattern (activation ≥ threshold) |
 | `CONFIRMED` | Script unit has sufficient confirmation from children |
 | `FAILED` | Unit has failed validation or encountered error |
 | `SUPPRESSED` | Unit has been inhibited by conflicting information |
@@ -102,6 +102,7 @@ The **compact arithmetic propagation** computes how activation flows through eac
 - **RET Gate**: `FAILED` → -0.5, `CONFIRMED` → +0.2
 
 All values are configurable via `EngineConfig` to support experiments.
+In addition, optional minimal source activation thresholds per link type can suppress gate output when the source unit's activation is below a configured value (defaults are 0.0 for all link types).
 
 #### 2. State Update Phase
 ```python
@@ -622,7 +623,7 @@ varied_house = make_varied_scene('house', size=64,
 ```python
 from perception.terminals import comprehensive_terminals_from_image
 
-# Extract all 16 terminal features
+# Extract comprehensive terminals (advanced + AE + engineered; optional CNN via env gate)
 features = comprehensive_terminals_from_image(scene)
 
 # Basic features (3 terminals)
@@ -647,6 +648,10 @@ print(f"Aspect ratio: {features['t_aspect']:.3f}")
 
 # Autoencoder features (4 terminals)
 print(f"Latent features: {[features[f't_ae_{i}'] for i in range(4)]}")
+
+# Extra engineered terminals (examples)
+print(f"Vertical symmetry: {features.get('t_vsym', 0):.3f}")
+print(f"Rectangularity: {features.get('t_rect', 0):.3f}")
 ```
 
 **Feature Categories:**
