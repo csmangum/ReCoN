@@ -128,7 +128,7 @@ cfg = EngineConfig(
 engine = Engine(graph, config=cfg)
 ```
 
-**Metrics (Day 6)**
+**Metrics**
 
 - Engine records metrics in `engine.snapshot()['stats']`:
   - `terminal_request_count`: total SUR requests to TERMINALs
