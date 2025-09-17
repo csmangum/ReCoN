@@ -134,15 +134,21 @@ import pickle
 
 def simple_filters(img):
     """
-    Extract basic visual features using simple convolution filters.
+    Extract basic visual features using lightweight convolution proxies.
 
-    This function applies basic edge detection filters to extract:
+    This function computes:
     - Mean intensity: Overall brightness of the image
-    - Vertical edges: Strength of vertical edge responses
-    - Horizontal edges: Strength of horizontal edge responses
+    - Vertical edges: Proxy for left-right intensity changes
+    - Horizontal edges: Proxy for top-bottom intensity changes
 
-    The edge detection uses a simple 2x2 kernel that responds to intensity
-    differences between adjacent pixels.
+    Note:
+    For efficiency and zero-dependency operation, edge responses are computed
+    by flattening both the 2x2 kernel and the 2D image into 1D arrays, and then
+    performing a 1D convolution of the flattened kernel over the flattened image
+    data. This is a crude, non-standard proxy for edge detection and is not
+    equivalent to a true 2D convolution. This approximation is only suitable for
+    synthetic scenes used in demos/tests, and should not be used for real image
+    processing tasks.
 
     Args:
         img: Input image as 2D numpy array
