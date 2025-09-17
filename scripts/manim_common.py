@@ -15,6 +15,7 @@ from manim import (
     GREY_B,
     AnimationGroup,
     Arrow,
+    Arc,
     Circle,
     DashedLine,
     FadeIn,
@@ -75,9 +76,15 @@ class NodeViz:
         if a <= 0.0:
             self.meter = None
             return self
-        arc = Circle(radius=self.radius + 0.42, color=color, stroke_width=4)
-        arc.move_to(self.shape.get_center())
-        self.meter = arc
+        meter = Arc(
+            start_angle=-np.pi / 2,
+            angle=2 * np.pi * a,
+            radius=self.radius + 0.42,
+            color=color,
+            stroke_width=4,
+        )
+        meter.move_to(self.shape.get_center())
+        self.meter = meter
         self.group.add(self.meter)
         return self
 
