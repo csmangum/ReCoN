@@ -516,12 +516,7 @@ class Graph:
 
                 # SUB link validation
                 if edge.type == LinkType.SUB:
-                    # SUB should flow from terminals to scripts (evidence)
-                    if src_unit.kind != UnitType.TERMINAL:
-                        issues["sub_link_issues"].append(
-                            f"SUB link from {src_unit.kind.name} '{unit_id}' to "
-                            f"{dst_unit.kind.name} '{edge.dst}' - SUB should originate from terminals"
-                        )
+                    # SUB flows from child units (terminal or script) to parent scripts (evidence)
                     if dst_unit.kind != UnitType.SCRIPT:
                         issues["sub_link_issues"].append(
                             f"SUB link from {src_unit.kind.name} '{unit_id}' to "
@@ -561,11 +556,12 @@ class Graph:
                             f"{dst_unit.kind.name} '{edge.dst}' - RET should only connect scripts"
                         )
 
-                # Edge weight validation
-                if not (0.0 <= edge.w <= 1.0):
+                # Edge weight validation: allow inhibitory/learned ranges
+                # Supported range aligns with learning utilities: [-2.0, 2.0]
+                if not (-2.0 <= edge.w <= 2.0):
                     issues["edge_weight_issues"].append(
                         f"Edge weight {edge.w} for {edge.type.name} link from '{unit_id}' to "
-                        f"'{edge.dst}' is outside valid range [0.0, 1.0]"
+                        f"'{edge.dst}' is outside recommended range [-2.0, 2.0]"
                     )
 
         return {k: v for k, v in issues.items() if v}  # Remove empty categories

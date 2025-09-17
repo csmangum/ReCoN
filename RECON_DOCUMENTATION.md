@@ -41,7 +41,7 @@ Each unit maintains a **finite state machine** with 8 possible states:
 | `REQUESTED` | Unit has received a request for activation |
 | `WAITING` | Unit is waiting for dependencies or external conditions |
 | `ACTIVE` | Unit is actively processing/confirming |
-| `TRUE` | Terminal unit has detected its feature/pattern |
+| `TRUE` | Terminal unit has detected its feature/pattern (activation ≥ threshold) |
 | `CONFIRMED` | Script unit has sufficient confirmation from children |
 | `FAILED` | Unit has failed validation or encountered error |
 | `SUPPRESSED` | Unit has been inhibited by conflicting information |
@@ -53,7 +53,9 @@ Units are connected by **directed, typed links** that determine information flow
 #### SUB (Subordinate) Links
 - **Direction**: Child → Parent
 - **Purpose**: Evidence propagation (bottom-up)
-- **Example**: Terminal provides confirmation evidence to its parent script
+- **Examples**:
+  - Terminal provides confirmation evidence to its parent script
+  - Child script provides aggregated evidence to its parent script
 
 #### SUR (Superior) Links
 - **Direction**: Parent → Child
@@ -102,6 +104,7 @@ The **compact arithmetic propagation** computes how activation flows through eac
 - **RET Gate**: `FAILED` → -0.5, `CONFIRMED` → +0.2
 
 All values are configurable via `EngineConfig` to support experiments.
+In addition, optional minimal source activation thresholds per link type can suppress gate output when the source unit's activation is below a configured value (defaults are 0.0 for all link types).
 
 #### 2. State Update Phase
 ```python
@@ -321,11 +324,11 @@ link_issues = graph.validate_link_consistency()
 ```
 
 **Link Type Rules:**
-- **SUB links**: Should connect terminals → scripts (evidence flow)
+- **SUB links**: Should target scripts (evidence flows from terminals or child scripts → scripts)
 - **SUR links**: Should connect scripts → children (request flow)
 - **POR links**: Should only connect scripts ↔ scripts (temporal precedence)
 - **RET links**: Should only connect scripts ↔ scripts (temporal feedback)
-- **Edge weights**: Must be within [0.0, 1.0] range
+- **Edge weights**: Recommended range [-2.0, 2.0] to support inhibitory and learned connections
 
 ### Unit Relationship Validation
 
@@ -622,8 +625,7 @@ varied_house = make_varied_scene('house', size=64,
 ```python
 from perception.terminals import comprehensive_terminals_from_image
 
-# Extract all 16 terminal features
-features = comprehensive_terminals_from_image(scene)
+# Extract 21 terminal features (12 advanced + 4 autoencoder + 5 engineered)
 
 # Basic features (3 terminals)
 print(f"Mean intensity: {features['t_mean']:.3f}")
@@ -647,6 +649,13 @@ print(f"Aspect ratio: {features['t_aspect']:.3f}")
 
 # Autoencoder features (4 terminals)
 print(f"Latent features: {[features[f't_ae_{i}'] for i in range(4)]}")
+
+# Extra engineered features (5 terminals)
+print(f"Vertical symmetry: {features['t_vsym']:.3f}")
+print(f"Line anisotropy: {features['t_line_aniso']:.3f}")
+print(f"Triangularity: {features['t_triangle']:.3f}")
+print(f"Rectangularity: {features['t_rect']:.3f}")
+print(f"Door brightness: {features['t_door_bright']:.3f}")
 ```
 
 **Feature Categories:**
@@ -706,7 +715,7 @@ The system provides multiple levels of terminal feature extraction that you can 
 from perception.terminals import (
     terminals_from_image,           # Basic 3 features
     advanced_terminals_from_image,  # Advanced 12 features  
-    comprehensive_terminals_from_image  # All 16 features
+    comprehensive_terminals_from_image  # All 21 features (12 + 4 + 5)
 )
 
 # Create custom terminal extractors
