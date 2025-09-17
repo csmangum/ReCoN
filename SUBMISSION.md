@@ -6,10 +6,10 @@ This project implements a faithful, practical Request Confirmation Network (ReCo
 
 ## Demo & Links
 
-- Project repository: <ADD_REPO_URL>
-- Demo video (2–3 min): <ADD_VIDEO_LINK>
-- Interactive demo (Streamlit): see Quickstart below to run locally
-- Original paper: [CoCoNIPS 2015 PDF](CoCoNIPS_2015_paper_6.pdf)
+- **Root Activation Animation**: [RootActivationScene.mp4](RootActivationScene.mp4) - Visual demonstration of spreading activation dynamics
+- **User Interface (Streamlit)**: see Quickstart below to run locally
+- **Key Features Notebook**: [ReCoN_Key_Features_Demo.ipynb](ReCoN_Key_Features_Demo.ipynb) - Comprehensive demonstration of active perception, hierarchical recognition, temporal sequencing, and metrics
+- **Original paper**: [CoCoNIPS 2015 PDF](CoCoNIPS_2015_paper_6.pdf)
 
 ## Quickstart (Reproduce in ~2 minutes)
 
@@ -309,18 +309,6 @@ graph.export_graphml('output/house_network.graphml')
 - Toggles: with/without POR; different confirmation ratios; deterministic vs. nondeterministic ordering.
 - Validation testing: Comprehensive validation system tested with intentionally problematic graphs, successfully detecting all categories of structural issues.
 
-## Evaluation vs. CIMC Criteria
-
-- Implemented a novel theoretical idea → faithful ReCoN with tests and docs.
-- Translation between representation and UI → interactive visualization + CLI.
-- Active perception exhibited → selective terminal requests, temporal sequencing.
-- Bonus (if applicable) → learning utilities, format conversion, metrics suite, comprehensive graph validation system with cycle detection, performance monitoring, and health scoring.
-
-## Limitations & Future Work
-
-- Current constraints (noise robustness, scaling, learned structure), and practical limitations.
-- Next steps: richer perception (CNNs), learning SUB/SUR/POR/RET, multi-modal, real-time.
-
 ## How to Run Tests
 
 ```bash
@@ -357,7 +345,6 @@ engine = Engine(graph, config=cfg)
 ## Submission Artifacts
 
 - Source code, `requirements.txt`, and this `SUBMISSION.md`.
-- Demo video link and a few screenshots from the Streamlit UI.
 - Example YAML scripts in `scripts/` (e.g., `house.yaml`, `barn.yaml`).
 - Reproducibility notes (Python version, OS; no GPU required).
 
