@@ -175,7 +175,7 @@ tests/
 run_tests.py            # Lightweight test runner (no pytest required)
 ```
 
-### Metrics (Day 6)
+### Metrics
 
 The engine records runtime metrics to evaluate active perception efficiency and timing. These are exposed via `Engine.snapshot()` under the `stats` key and via convenience helpers in `recon_core.metrics`.
 
