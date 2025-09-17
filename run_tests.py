@@ -399,4 +399,19 @@ if __name__ == "__main__":
         main = wrapped_main
 
     _append_metrics_tests()
+
+    # CLI smoke checks (best-effort)
+    try:
+        import subprocess
+        env = os.environ.copy()
+        env.setdefault("PYTHONPATH", ".")
+        print("\n=== CLI Smoke Checks ===")
+        subprocess.run(["python3", "scripts/recon_cli.py", "-h"], check=True, env=env)
+        subprocess.run(["python3", "scripts/recon_cli.py", "--version"], check=True, env=env)
+        subprocess.run(["python3", "scripts/recon_cli.py", "--list-scenes"], check=True, env=env)
+        subprocess.run(["python3", "scripts/recon_cli.py", "scripts/house.yaml", "--dry-run"], check=True, env=env)
+        print("CLI smoke checks passed.")
+    except Exception as e:
+        print("CLI smoke checks skipped or failed:", e)
+
     sys.exit(main())

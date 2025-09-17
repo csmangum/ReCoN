@@ -47,11 +47,14 @@ ReCoN consists of SCRIPT and TERMINAL units that are tiny finite-state machines 
   - `recon_core/engine.py` — update cycle, compact gate arithmetic, message passing
   - `recon_core/graph.py` — `Unit`, `Edge`, `Graph` data structures + comprehensive validation
   - `recon_core/enums.py` — states, messages, link types, unit types
+  - `recon_core/config.py` — tunable EngineConfig defaults and policies
   - `recon_core/compiler.py` — YAML → graph (hierarchy via SUB/SUR; sequence via POR; RET optional)
   - `recon_core/metrics.py` — runtime stats and convenience helpers
   - `perception/dataset.py` — synthetic scenes (house, barn, occlusion, variations)
-  - `perception/terminals.py` — terminal features (filters, SIFT-like, autoencoder)
+  - `perception/terminals.py` — terminal features (basic filters, SIFT-like, blob/geometric, autoencoder, optional TinyCNN, extra engineered)
+  - `scripts/recon_cli.py` — CLI to compile YAML, run engine, dump snapshots
   - `scripts/graph_validation_demo.py` — comprehensive validation demonstration
+  - `scripts/export_graphml_demo.py` — graph → GraphML export utility
   - `viz/app_streamlit.py` — interactive visualization
 
 ```mermaid
@@ -105,7 +108,7 @@ End-to-end flow: a YAML script (e.g., `scripts/house.yaml`) is compiled into a `
 
 ## Implementation Details
 
-- Compact gate arithmetic (typical contributions):
+- Compact gate arithmetic (configurable contributions; defaults):
   - SUB: TRUE/CONFIRMED → +1.0; FAILED → −1.0
   - SUR: REQUESTED/ACTIVE → +0.3; FAILED → −0.3
   - POR: CONFIRMED → +0.5; FAILED → −0.5
@@ -131,7 +134,7 @@ The ReCoN engine operates in discrete time steps with a carefully orchestrated f
 
 The state semantics define how different unit types respond to activation and coordinate through the network:
 
-**Terminal Units**: These leaf nodes interface with perception. They remain INACTIVE until receiving a REQUEST message, then transition to TRUE when their activation exceeds a threshold (default 0.1). Once TRUE, they send CONFIRM messages to parents via SUB links. If activation drops below a failure threshold, they transition to FAILED and send INHIBIT_CONFIRM messages. This models feature detection that requires both top-down attention (REQUEST) and bottom-up evidence.
+**Terminal Units**: These leaf nodes interface with perception. They remain INACTIVE until receiving a REQUEST message, then transition to TRUE when their activation exceeds a threshold (`u.thresh`, default 0.5). Once TRUE, they send CONFIRM messages to parents via SUB links. If activation later drops below a failure threshold (default 0.1), they transition to FAILED and send INHIBIT_CONFIRM messages. This models feature detection that requires both top-down attention (REQUEST) and bottom-up evidence.
 
 **Script Units**: These orchestration nodes coordinate child activities. They become REQUESTED when activation exceeds a threshold, then ACTIVE where they send REQUEST messages to children via SUR links. They CONFIRM when a configurable ratio (default 0.6) of children are TRUE/CONFIRMED, implementing AND/OR logic through structural composition rather than explicit operators. Fail-fast behavior means any FAILED child immediately causes the script to FAIL and send INHIBIT_CONFIRM to parents.
 
@@ -149,7 +152,7 @@ The `EngineConfig` class exposes behavioral knobs without changing core logic:
 
 **RET Feedback** (default False): Enables/disables temporal feedback where FAILED successors can demote CONFIRMED predecessors. When enabled, creates tighter temporal coupling where sequence failures propagate backward. When disabled, predecessors remain confirmed even if successors fail, modeling more independent subprocesses.
 
-Additional knobs include gate strengths (sub_positive=1.0, por_positive=0.5, etc.), activation gain (0.8), and thresholds, allowing fine-tuning of network dynamics for different scenarios.
+Additional knobs include gate strengths (sub_positive=1.0, sur_positive=0.3, por_positive=0.5, ret_positive=0.2 with corresponding negatives), activation gain (0.8), thresholds (script_request_activation_threshold=0.1, terminal_failure_threshold=0.1, confirmation_ratio=0.6), and optional per-link minimal source activation thresholds (`*_min_source_activation`) to suppress propagation when the source activation is too low.
 
 ### Compiler
 
@@ -233,7 +236,9 @@ These design choices create a system that's easier to understand, debug, and ext
 
 - Synthetic scenes from `perception/dataset.py` (size, noise, occlusion, variations).
 - Terminal features from `perception/terminals.py`:
-  - Basic filters, SIFT-like features, blob/geometric features, optional autoencoder.
+  - Basic filters, SIFT-like features, blob/geometric features
+  - Optional denoising autoencoder terminals (`t_ae_*`) and TinyCNN terminals (`t_cnn_*`)
+  - Extra engineered terminals: `t_vsym`, `t_line_aniso`, `t_triangle`, `t_rect`, `t_door_bright`
 - Mapping from features to terminal units used in the demo(s).
 
 Rationale: synthetic glyph-like scenes make object structure explicit (e.g., roof above body; door inside body), highlighting ReCoN's strengths in representing part relations and temporal checks. Terminals provide simple, explainable feature activations; an optional denoising autoencoder can supply compact learned features when enabled.
@@ -286,6 +291,17 @@ print(f"Health score: {stats['health_score']:.3f}")
 print(f"Validation issues: {stats['validation_summary']['total_issues']}")
 ```
 
+### GraphML Export
+
+Export any compiled or programmatically built graph for external analysis:
+
+```python
+from recon_core.compiler import compile_from_file
+
+graph = compile_from_file('scripts/house.yaml')
+graph.export_graphml('output/house_network.graphml')
+```
+
 ## Experiments & Results
 
 - Qualitative traces: step-by-step sequences on house and barn scenes showing selective SUR requests, confirmations via SUB, and POR-driven sequencing (e.g., roof → body → door).
@@ -313,6 +329,8 @@ python -m pytest tests/ -v
 python run_tests.py
 ```
 
+Selected tests include engine edge cases, compact arithmetic, graph structure, learning, metrics, and perception scenes. Use `make tests` if using the provided Makefile.
+
 ## Configuration Reference
 
 Typical engine configuration usage:
@@ -322,16 +340,19 @@ from recon_core.config import EngineConfig
 from recon_core.engine import Engine
 
 cfg = EngineConfig(
-    sur_positive=0.3,
-    por_positive=0.5,
-    confirmation_ratio=0.6,
+    sur_positive=0.25,
+    por_positive=0.6,
+    confirmation_ratio=0.7,
     deterministic_order=True,
-    ret_feedback_enabled=False,
+    ret_feedback_enabled=True,
 )
 engine = Engine(graph, config=cfg)
 ```
 
-- Env flags: `RECON_TRAIN_AE=1` enables autoencoder training for terminals.
+- Env flags:
+  - `RECON_TRAIN_AE=1` to enable autoencoder training; `RECON_TRAIN_AE_EPOCHS` to set epochs (default 30)
+  - `RECON_TRAIN_CNN=1` to enable TinyCNN training; `RECON_TRAIN_CNN_EPOCHS` (default 10)
+  - `RECON_MODEL_DIR` to set model cache directory (default `~/.cache/recon`)
 
 ## Submission Artifacts
 
