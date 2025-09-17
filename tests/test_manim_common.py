@@ -4,7 +4,6 @@ import sys
 
 import pytest
 
-
 pytest.importorskip("manim")
 
 
@@ -20,15 +19,22 @@ def _skip_if_text_unavailable():
 
     try:
         _ = Text("ok", font_size=12)
-    except Exception as exc:  # pragma: no cover - environment-dependent
+    except (
+        ImportError,
+        RuntimeError,
+        OSError,
+    ) as exc:  # pragma: no cover - environment-dependent
         pytest.skip(f"Skipping Manim Text-based tests: {exc}")
 
 
 def test_nodeviz_label_and_shape_types():
     _ensure_scripts_on_path()
     from manim import Circle, Square
+    from manim_common import (
+        NodeViz,
+    )  # Import added to path by _ensure_scripts_on_path()
+
     from recon_core.enums import UnitType
-    from manim_common import NodeViz
 
     _skip_if_text_unavailable()
 
@@ -47,8 +53,11 @@ def test_nodeviz_label_and_shape_types():
 def test_activation_meter_arc_properties():
     _ensure_scripts_on_path()
     from manim import Arc
+    from manim_common import (
+        NodeViz,
+    )  # Import added to path by _ensure_scripts_on_path()
+
     from recon_core.enums import UnitType
-    from manim_common import NodeViz
 
     _skip_if_text_unavailable()
 
@@ -71,8 +80,12 @@ def test_activation_meter_arc_properties():
 def test_edge_arrow_type_selection():
     _ensure_scripts_on_path()
     from manim import Arrow, DashedLine
+    from manim_common import (  # Import added to path by _ensure_scripts_on_path()
+        NodeViz,
+        edge_arrow,
+    )
+
     from recon_core.enums import UnitType
-    from manim_common import NodeViz, edge_arrow
 
     _skip_if_text_unavailable()
 
@@ -88,9 +101,13 @@ def test_edge_arrow_type_selection():
 
 def test_base_scene_helpers_without_init():
     _ensure_scripts_on_path()
-    from manim import AnimationGroup
+    from manim import WHITE, AnimationGroup
+    from manim_common import (  # Import added to path by _ensure_scripts_on_path()
+        BaseReconScene,
+        NodeViz,
+    )
+
     from recon_core.enums import UnitType
-    from manim_common import NodeViz, BaseReconScene
 
     _skip_if_text_unavailable()
 
@@ -100,16 +117,17 @@ def test_base_scene_helpers_without_init():
     src = NodeViz("u_src", unit_type=UnitType.SCRIPT).move_to((0, 0, 0))
     dst = NodeViz("u_dst", unit_type=UnitType.SCRIPT).move_to((2, 0, 0))
 
-    anim = scene.animate_message_between_nodes(src, dst, "MSG", color=1.0, duration=0.5)
+    anim = scene.animate_message_between_nodes(
+        src, dst, "MSG", color=WHITE, duration=0.5
+    )
     assert isinstance(anim, AnimationGroup)
 
     # Highlight shape matches node type
     square_node = NodeViz("t_vert", unit_type=UnitType.TERMINAL)
     circle_node = NodeViz("u_root", unit_type=UnitType.SCRIPT)
-    sq = scene.create_highlight_shape(square_node, color=1.0)
-    cr = scene.create_highlight_shape(circle_node, color=1.0)
+    sq = scene.create_highlight_shape(square_node, color=WHITE)
+    cr = scene.create_highlight_shape(circle_node, color=WHITE)
 
     # Type names are stable across manim versions
     assert sq.__class__.__name__ == "Square"
     assert cr.__class__.__name__ == "Circle"
-
