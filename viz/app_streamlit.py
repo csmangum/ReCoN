@@ -648,7 +648,8 @@ with col_graph:
 
     # Animated message arrows on the graph
     # Show messages that led into this state (previous step -> current)
-    if st.session_state.sim.message_history:
+    # Skip drawing arrows at t=1 (timeline_idx 1)
+    if st.session_state.sim.message_history and timeline_idx != 1:
         # Show messages from the current step (timeline_idx corresponds to the step)
         msg_index = min(timeline_idx, len(st.session_state.sim.message_history) - 1)
         messages = st.session_state.sim.message_history[msg_index]
@@ -783,7 +784,8 @@ with col_graph:
     ax_msgs.axis("off")
 
     # Show message counts and recent activity for the current step
-    if st.session_state.sim.message_history:
+    # Skip showing messages at t=1 (timeline_idx 1)
+    if st.session_state.sim.message_history and timeline_idx != 1:
         # Show messages from the current step (timeline_idx corresponds to the step)
         msg_index = min(timeline_idx, len(st.session_state.sim.message_history) - 1)
         messages = st.session_state.sim.message_history[msg_index]
