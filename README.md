@@ -36,6 +36,8 @@ pip install -r requirements.txt
 streamlit run viz/app_streamlit.py
 ```
 
+Then in the app, click "Generate Scene" and "Run" to watch active perception in action. Use the "Feature source" selector to switch between Basic, Advanced, Autoencoder, CNN, Comprehensive, and Deep Comprehensive terminal sets. Training buttons allow optional AE/CNN training (see env vars below).
+
 ### CLI
 
 ```bash
@@ -52,7 +54,27 @@ python scripts/recon_cli.py scripts/house.yaml --steps 10 --out snapshot.json
 python scripts/graph_validation_demo.py
 ```
 
-Then click **Generate Scene** and **Run** to watch the active perception in action!
+Available CLI flags (subset): `--steps`, `--out`, `--sur`, `--por`, `--ret`, `--sub`, `--confirm-ratio`, `--deterministic`, `--ret-feedback`.
+
+### Makefile helpers
+
+```bash
+# Create venv and install deps
+make venv && make deps
+
+# Run the Streamlit demo
+make demo
+
+# Run tests (pytest)
+make tests
+
+# Render the Manim video (production/preview)
+make render
+make render-fast
+
+# Clean caches
+make clean
+```
 
 ## Repo layout
 
@@ -61,16 +83,21 @@ recon_core/
   enums.py        # state/message/link enums
   graph.py        # Unit, Edge, Graph model
   engine.py       # propagation + state update rules
+  compiler.py     # YAML→graph compiler
   learn.py        # (optional) tiny learning helpers for sur weights
   metrics.py      # (Day 6) metrics helpers and engine.stats accessors
 perception/
   dataset.py      # synthetic 2D scenes with variety (houses, barns, occlusion)
   terminals.py    # comprehensive terminals (filters + SIFT-like + autoencoder + engineered [+ optional TinyCNN])
 scripts/
+  recon_cli.py                  # CLI for running YAML scripts and dumping snapshots
   house.yaml                    # script → recon graph compiler input
+  barn.yaml ...                 # additional object scripts
   graph_validation_demo.py      # comprehensive graph validation demonstration
+  export_graphml_demo.py        # graph → GraphML export
 viz/
   app_streamlit.py    # interactive visualization
+run_tests.py          # lightweight test runner (no pytest required)
 tests/
   test_engine.py      # smoke tests for engine transitions
 ```
@@ -109,6 +136,8 @@ python3 run_tests.py
 
 - Set `RECON_TRAIN_AE=1` to enable autoencoder training for AE-based terminals (disabled by default).
 - Set `RECON_TRAIN_CNN=1` to enable TinyCNN training for CNN-based terminals (disabled by default).
+- Optional epoch overrides used by the UI: `RECON_TRAIN_AE_EPOCHS` (default 30), `RECON_TRAIN_CNN_EPOCHS` (default 10).
+- Models are cached under `~/.cache/recon` by default; override with `RECON_MODEL_DIR`.
 
 ### Engine configuration
 
@@ -207,6 +236,18 @@ print(f"Health score: {graph.get_graph_statistics()['health_score']:.3f}")
 - **Graph Integrity**: Detects orphaned units, connectivity issues, and structural problems
 - **Performance Metrics**: Analyzes complexity, efficiency, and identifies bottlenecks
 - **Custom Validation**: Extensible framework for domain-specific validation rules
+
+### Graph export
+
+Export any built graph to GraphML for analysis/visualization in external tools:
+
+```python
+from recon_core.graph import Graph
+
+g = Graph()
+# ... build units/edges ...
+g.export_graphml("output/recon_graph.graphml")
+```
 
 ## 💡 Usage Examples
 
