@@ -17,7 +17,6 @@ Enhanced interface includes:
 
 import os
 import sys
-import time
 
 # Add project root to Python path BEFORE any imports
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -30,16 +29,7 @@ import numpy as np
 import streamlit as st
 from contextlib import contextmanager
 
-from perception.terminals import (
-    sample_scene_and_terminals,
-    advanced_terminals_from_image,
-    autoencoder_terminals_from_image,
-    comprehensive_terminals_from_image,
-    deep_comprehensive_terminals_from_image,
-    cnn_terminals_from_image,
-    get_autoencoder,
-    get_cnn,
-)
+from perception.terminals import sample_scene_and_terminals
 from perception.dataset import make_house_scene
 from recon_core.engine import Engine
 from recon_core.enums import LinkType, State, UnitType
@@ -59,7 +49,7 @@ plt.style.use("seaborn-v0_8-whitegrid")
 st.markdown(
     """
     <style>
-    .block-container { padding-top: 0.5rem; padding-bottom: 2rem; }
+    .block-container { padding-top: 3rem; padding-bottom: 2rem; }
     [data-testid="stSidebar"] { background-color: rgba(15, 23, 42, 0.03); }
     div[data-testid="stMetricValue"] { font-size: 1.3rem; }
     div[data-testid="stMetricLabel"] { color: #64748b; }
@@ -79,7 +69,6 @@ class ReCoNSimulation:
         self.history = []  # Store snapshots for timeline
         self.message_history = []  # Store message flows for animation
         self.fovea_path = []  # Track fovea/scanning positions
-        self.is_running = False
         self.max_history = 100
 
     def init_graph(self):
@@ -92,7 +81,7 @@ class ReCoNSimulation:
         for term_id in ["t_mean", "t_vert", "t_horz"]:
             g.add_unit(
                 Unit(
-                    term_id, UnitType.TERMINAL, state=State.INACTIVE, a=0.0, thresh=0.5
+                    term_id, UnitType.TERMINAL, state=State.INACTIVE, a=0.0, thresh=0.005
                 )
             )
         # hierarchy: terminals -> scripts via SUB; parent -> child via SUR
@@ -176,7 +165,7 @@ class ReCoNSimulation:
         for term_id, _ in terminals.items():
             self.graph.add_unit(
                 Unit(
-                    term_id, UnitType.TERMINAL, state=State.INACTIVE, a=0.0, thresh=0.5
+                    term_id, UnitType.TERMINAL, state=State.INACTIVE, a=0.0, thresh=0.005
                 )
             )
             parent = self._choose_parent_for_terminal(term_id)
@@ -186,25 +175,12 @@ class ReCoNSimulation:
         for term_id, term_val in terminals.items():
             u = self.graph.units[term_id]
             u.a = float(term_val)
-            u.state = State.REQUESTED if term_val > 0.1 else State.INACTIVE
+            u.state = State.INACTIVE  # Start all terminals as inactive
 
-    def generate_scene(self, feature_source: str = "Basic"):
-        """Generate a new scene and initialize terminals based on selected feature source."""
+    def generate_scene(self):
+        """Generate a new scene and initialize terminals using Basic feature source."""
         img = make_house_scene()
-        if feature_source == "Basic":
-            _, tvals = sample_scene_and_terminals()
-        elif feature_source == "Advanced":
-            tvals = advanced_terminals_from_image(img)
-        elif feature_source == "Autoencoder":
-            tvals = autoencoder_terminals_from_image(img)
-        elif feature_source == "CNN":
-            tvals = cnn_terminals_from_image(img)
-        elif feature_source == "Comprehensive":
-            tvals = comprehensive_terminals_from_image(img)
-        elif feature_source == "Deep Comprehensive":
-            tvals = deep_comprehensive_terminals_from_image(img)
-        else:
-            _, tvals = sample_scene_and_terminals()
+        _, tvals = sample_scene_and_terminals()
 
         self._rebuild_terminals(tvals)
         self.graph.units["u_root"].a = 1.0
@@ -222,9 +198,11 @@ class ReCoNSimulation:
         @contextmanager
         def patch_send_message(engine, on_send):
             original = engine.send_message
+
             def wrapper(sender_id, receiver_id, message):
                 on_send(sender_id, receiver_id, message)
                 return original(sender_id, receiver_id, message)
+
             engine.send_message = wrapper  # type: ignore
             try:
                 yield
@@ -261,11 +239,47 @@ class ReCoNSimulation:
         return snap
 
     def reset_simulation(self):
-        """Reset the simulation to initial state."""
+        """Reset the simulation to initial state completely."""
+        # Reset engine state
         self.engine.reset()
+        
+        # Clear all history and tracking
         self.history = []
         self.message_history = []
         self.fovea_path = [(32, 32)]
+        
+        # Reset all units to inactive state with zero activation
+        for unit in self.graph.units.values():
+            unit.state = State.INACTIVE
+            unit.a = 0.0
+            # Clear message queues
+            unit.inbox = []
+            unit.outbox = []
+        
+        # Reset engine time
+        self.engine.t = 0
+        
+        return self.engine.snapshot()
+    
+    def reset_simulation_only(self):
+        """Reset only the simulation state without changing graph structure."""
+        return self.reset_simulation()
+    
+    def reset_completely(self):
+        """Reset everything including scene, terminals, and all state."""
+        # Reset simulation state
+        self.reset_simulation()
+        
+        # Restore initial graph structure (recreate the basic terminals)
+        self.graph = self.init_graph()
+        self.engine = Engine(self.graph)
+        
+        # Clear scene data
+        if hasattr(self, 'current_scene'):
+            delattr(self, 'current_scene')
+        if hasattr(self, 'current_terminals'):
+            delattr(self, 'current_terminals')
+        
         return self.engine.snapshot()
 
 
@@ -291,89 +305,37 @@ if "sim" not in st.session_state:
 st.title("🖼️ Request Confirmation Network — Interactive Demo")
 
 # Sidebar: refined control panel
-if "run_delay" not in st.session_state:
-    st.session_state.run_delay = 0.5
-
 with st.sidebar:
     st.header("🎛️ Controls")
 
     # Scene controls
     st.caption("Scene")
-    # Feature source selection
-    feature_source = st.selectbox(
-        "Feature source",
-        [
-            "Basic",
-            "Advanced",
-            "Autoencoder",
-            "CNN",
-            "Comprehensive",
-            "Deep Comprehensive",
-        ],
-        index=0,
-        help="Choose which feature extractor to seed terminal activations with.",
-    )
-
-    # Training controls
-    with st.expander("Training (AE/CNN)"):
-        col_train_ae, col_train_cnn = st.columns(2)
-        with col_train_ae:
-            ae_epochs = st.number_input(
-                "AE epochs", min_value=1, max_value=200, value=10, step=1
-            )
-            if st.button("Train AE", use_container_width=True):
-                # Validate epochs value before setting environment variable
-                if isinstance(ae_epochs, (int, float)) and 1 <= ae_epochs <= 200:
-                    os.environ["RECON_TRAIN_AE_EPOCHS"] = str(int(ae_epochs))
-                    # Force retrain regardless of env gate
-                    _ = get_autoencoder(retrain=True)
-                    st.success("Autoencoder trained and cached.")
-                else:
-                    st.error("Epochs value must be an integer between 1 and 200.")
-        with col_train_cnn:
-            cnn_epochs = st.number_input(
-                "CNN epochs", min_value=1, max_value=200, value=5, step=1
-            )
-            if st.button("Train CNN", use_container_width=True):
-                # Validate epochs value before setting environment variable
-                if isinstance(cnn_epochs, (int, float)) and 1 <= cnn_epochs <= 200:
-                    os.environ["RECON_TRAIN_CNN_EPOCHS"] = str(int(cnn_epochs))
-                    _ = get_cnn(retrain=True)
-                    st.success("TinyCNN trained and cached.")
-                else:
-                    st.error("Epochs value must be an integer between 1 and 200.")
 
     col_scene_gen, col_scene_reset = st.columns(2)
     with col_scene_gen:
-        if st.button("🎲 Generate Scene", type="primary", use_container_width=True):
-            img, terminal_vals = st.session_state.sim.generate_scene(feature_source)
+        if st.button("🎲 Generate", type="primary", use_container_width=True):
+            img, terminal_vals = st.session_state.sim.generate_scene()
             st.session_state.img = img
             st.session_state.tvals = terminal_vals
             st.session_state.snap = st.session_state.sim.engine.snapshot()
     with col_scene_reset:
         if st.button("🔄 Reset", use_container_width=True):
-            st.session_state.snap = st.session_state.sim.reset_simulation()
+            # Complete reset of simulation and session state
+            st.session_state.snap = st.session_state.sim.reset_completely()
+            # Clear session state variables
+            if 'img' in st.session_state:
+                del st.session_state['img']
+            if 'tvals' in st.session_state:
+                del st.session_state['tvals']
+            # Force rerun to clear all visualizations
+            st.rerun()
 
     st.divider()
 
     # Playback controls
     st.caption("Playback")
-    col_step, col_runpause = st.columns(2)
-    with col_step:
-        if st.button("⏭️ Step", use_container_width=True):
-            st.session_state.snap = st.session_state.sim.step_simulation(1)
-    with col_runpause:
-        run_label = "▶️ Run" if not st.session_state.sim.is_running else "⏸️ Pause"
-        if st.button(run_label, type="primary", use_container_width=True):
-            st.session_state.sim.is_running = not st.session_state.sim.is_running
-
-    speed_choice = st.select_slider(
-        "Speed",
-        options=["Slow", "Normal", "Fast"],
-        value=get_speed_label_from_delay(st.session_state.run_delay),
-        help="Controls auto-run speed",
-    )
-    st.session_state.run_delay = SPEED_DELAY_MAPPING[speed_choice]
+    if st.button("⏭️ Step", use_container_width=True):
+        st.session_state.snap = st.session_state.sim.step_simulation(1)
 
     st.divider()
 
@@ -406,19 +368,13 @@ with st.sidebar:
         index=unit_options.index("u_root") if "u_root" in unit_options else 0,
     )
 
-# Auto-run logic (uses the chosen speed)
-if st.session_state.sim.is_running:
-    st.session_state.snap = st.session_state.sim.step_simulation(1)
-    time.sleep(st.session_state.get("run_delay", 0.5))
-    st.rerun()
-
 # Main display
 col_scene, col_graph = st.columns([1, 1.2])
 
 with col_scene:
     st.subheader("🏠 Scene with Fovea Path")
 
-    # Get current scene
+    # Get current scene - show empty scene if no scene has been generated
     current_img = st.session_state.get("img", np.zeros((64, 64), dtype=np.float32))
 
     # Create visualization with fovea path and overlays
@@ -428,6 +384,12 @@ with col_scene:
 
     # Scene with overlays
     ax_scene.imshow(current_img, cmap="gray", extent=[0, 64, 64, 0])
+    
+    # Add text overlay if no scene has been generated
+    if 'img' not in st.session_state:
+        ax_scene.text(32, 32, "No Scene Generated\nClick 'Generate' to start", 
+                     ha='center', va='center', fontsize=12, 
+                     bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8))
 
     # Draw fovea path
     if len(st.session_state.sim.fovea_path) > 1:
@@ -448,9 +410,21 @@ with col_scene:
         if term_name in st.session_state.sim.graph.units:
             term_unit = st.session_state.sim.graph.units[term_name]
             term_value = float(getattr(term_unit, "a", 0.0))
-            color = "green" if term_value > 0.3 else "red"
+            # Use same threshold as network graph state determination (0.1)
+            # and use colors that match the network graph state colors
+            if term_value > 0.1:
+                color = "#6baed6"  # REQUESTED state color (blue)
+            else:
+                color = "#cccccc"  # INACTIVE state color (gray)
             size = 50 + term_value * 100
-            ax_scene.scatter(x, y, c=color, s=size, alpha=0.7, label=f"{term_name} ({term_value:.2f})")
+            ax_scene.scatter(
+                x,
+                y,
+                c=color,
+                s=size,
+                alpha=0.7,
+                label=f"{term_name} ({term_value:.2f})",
+            )
 
     ax_scene.set_xlim(0, 64)
     ax_scene.set_ylim(64, 0)  # Flip y-axis for image coordinates
@@ -508,6 +482,8 @@ with col_scene:
         cols = st.columns(num_cols)
         for i, (term_name, term_value) in enumerate(terminals_live):
             cols[i % num_cols].metric(term_name, f"{term_value:.3f}")
+    else:
+        st.info("No terminals available. Generate a scene to see terminal activations.")
 
 with col_graph:
     st.subheader("🕸️ Network Graph & Messages")
@@ -548,8 +524,8 @@ with col_graph:
     # Place terminal nodes grouped by their parent script units
     terminal_positions = {
         "t_horz": (-1.0, 1.0),  # near u_roof
-        "t_vert": (1.0, 1.0),   # near u_door
-        "t_mean": (0.0, 1.0),   # near u_body
+        "t_vert": (1.0, 1.0),  # near u_door
+        "t_mean": (0.0, 1.0),  # near u_body
     }
 
     # Position known terminals first
@@ -565,7 +541,9 @@ with col_graph:
     remaining_terminals = [t for t in all_terminals if t not in terminal_positions]
     parent_to_terms = {}
     for term_id in remaining_terminals:
-        parent_id = next((e.dst for e in out_edges.get(term_id, []) if e.type == LinkType.SUB), None)
+        parent_id = next(
+            (e.dst for e in out_edges.get(term_id, []) if e.type == LinkType.SUB), None
+        )
         parent_to_terms.setdefault(parent_id, []).append(term_id)
 
     for parent_id, terms in parent_to_terms.items():
@@ -671,7 +649,8 @@ with col_graph:
     # Animated message arrows on the graph
     # Show messages that led into this state (previous step -> current)
     if st.session_state.sim.message_history:
-        msg_index = max(0, min(len(st.session_state.sim.message_history) - 1, max(0, timeline_idx - 1)))
+        # Show messages from the current step (timeline_idx corresponds to the step)
+        msg_index = min(timeline_idx, len(st.session_state.sim.message_history) - 1)
         messages = st.session_state.sim.message_history[msg_index]
 
         # Define arrow styles for different message types
@@ -790,18 +769,23 @@ with col_graph:
 
     # Message summary panel
     try:
-        t_now = int(current_snap["t"]) if isinstance(current_snap.get("t", 0), (int, float)) else 0
+        t_now = (
+            int(current_snap["t"])
+            if isinstance(current_snap.get("t", 0), (int, float))
+            else 0
+        )
     except Exception:
         t_now = 0
-    step_title = f"Message Summary (Step t={max(0, t_now-1)} → t={t_now})"
+    step_title = f"Message Summary (Step t={t_now})"
     ax_msgs.set_title(step_title)
     ax_msgs.set_xlim(0, 10)
     ax_msgs.set_ylim(0, 10)
     ax_msgs.axis("off")
 
-    # Show message counts and recent activity for the same previous step
+    # Show message counts and recent activity for the current step
     if st.session_state.sim.message_history:
-        msg_index = max(0, min(len(st.session_state.sim.message_history) - 1, max(0, timeline_idx - 1)))
+        # Show messages from the current step (timeline_idx corresponds to the step)
+        msg_index = min(timeline_idx, len(st.session_state.sim.message_history) - 1)
         messages = st.session_state.sim.message_history[msg_index]
 
         # Message type counts

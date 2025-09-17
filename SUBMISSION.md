@@ -6,10 +6,10 @@ This project implements a faithful, practical Request Confirmation Network (ReCo
 
 ## Demo & Links
 
-- Project repository: <ADD_REPO_URL>
-- Demo video (2–3 min): <ADD_VIDEO_LINK>
-- Interactive demo (Streamlit): see Quickstart below to run locally
-- Original paper: [CoCoNIPS 2015 PDF](CoCoNIPS_2015_paper_6.pdf)
+- **Root Activation Animation**: [RootActivationScene.mp4](RootActivationScene.mp4) - Visual demonstration of spreading activation dynamics
+- **Simple User Interface**: See Quickstart below to run locally. It's not fully validated, so some behavior may be incorrect.
+- **Key Features Notebook**: [ReCoN_Key_Features_Demo.ipynb](ReCoN_Key_Features_Demo.ipynb) - Comprehensive demonstration of active perception, hierarchical recognition, temporal sequencing, and metrics
+- **Original paper**: [CoCoNIPS 2015 PDF](CoCoNIPS_2015_paper_6.pdf)
 
 ## Quickstart (Reproduce in ~2 minutes)
 
@@ -168,69 +168,72 @@ The YAML compiler translates declarative scripts into network topology:
 
 ### Trade-offs
 
-The implementation prioritizes pedagogical value over optimization:
+The implementation prioritizes pedagogical value over optimization, with several key design decisions that represent trade-offs between different goals:
 
-**Lightweight Perception**: Simple terminal features (filters, SIFT-like, geometric) run quickly without heavy computation. This favors responsiveness and understandability over accuracy, making the active perception paradigm clear through fast iteration rather than complex feature extraction.
+**Four-phase Update Cycle vs. Performance**
+- **Choice**: Split the paper's single processing phase into Propagation → State Update → Message Delivery → Second Message Processing
+- **Trade-off**: Deterministic, race-condition-free execution vs. potential performance overhead
+- **Benefit**: Reproducible traces and easier debugging; defensible 4-phase variant mapped to the paper's single processing phase
+- **Cost**: More complex execution model than the original paper's approach
 
-**Deterministic Stepping**: Fixed four-phase algorithm with configurable deterministic ordering trades performance (could parallelize phases) for predictability. Every run produces identical traces, enabling step-by-step debugging and causal analysis - essential for understanding the algorithm but slower than optimized async execution.
+**Deterministic vs. Non-deterministic Processing**
+- **Choice**: Sorted processing of units/messages (configurable) vs. natural iteration order
+- **Trade-off**: Reproducibility and stability vs. potential performance and natural randomness
+- **Benefit**: Stable demos/tests; clear, comparable experiments across runs/platforms
+- **Cost**: May not reflect real-world non-deterministic scenarios
+
+**Declarative YAML Compiler vs. Direct Programming**
+- **Choice**: Compile `scripts/*.yaml` into SUB/SUR hierarchies and POR/RET sequences vs. programmatic graph construction
+- **Trade-off**: Authoring flexibility and readability vs. compilation overhead and learning curve
+- **Benefit**: Readable scripts, reuse of parts, quick scenario swaps (house/barn)
+- **Cost**: Additional abstraction layer and YAML schema complexity
+
+**Configurable Parameters vs. Fixed Behavior**
+- **Choice**: Parameterize AND/OR behavior via `confirmation_ratio` and weighted children vs. hardcoded logic
+- **Trade-off**: Flexibility and experimentation vs. complexity and potential confusion
+- **Benefit**: Flexible modeling; clearer ablations without code changes
+- **Cost**: More configuration options to understand and tune
+
+**RET Feedback Toggle vs. Fixed Temporal Coupling**
+- **Choice**: Option to let failed successors demote confirmed predecessors vs. fixed temporal behavior
+- **Trade-off**: Configurable temporal coupling strength vs. additional complexity
+- **Benefit**: Compare strict vs. permissive sequencing behaviors
+- **Cost**: More behavioral modes to test and understand
+
+**Lightweight Perception vs. Heavy Computer Vision**
+- **Choice**: Simple filters/geometric features with optional autoencoder vs. state-of-the-art CV models
+- **Trade-off**: Clarity, speed, and interpretability vs. accuracy and realism
+- **Benefit**: Real-time demos and interpretable evidence signals
+- **Cost**: May not generalize to complex real-world scenes
+
+**Comprehensive Instrumentation vs. Minimal Overhead**
+- **Choice**: Request counts, first-step timings, convenience metrics vs. minimal runtime overhead
+- **Trade-off**: Measurable improvements and analysis capability vs. performance cost
+- **Benefit**: Quantifiable "active" efficiency and progress; easier analysis
+- **Cost**: Additional computation and memory overhead
+
+**Extensive Validation vs. Trust and Simplicity**
+- **Choice**: Cycle detection, link-consistency, relationships, integrity, performance analysis vs. minimal validation
+- **Trade-off**: Robustness and actionable feedback vs. additional complexity and runtime cost
+- **Benefit**: Robustness and actionable feedback during authoring
+- **Cost**: More complex validation logic and potential false positives
+
+**Interactive Visualization vs. Static Output**
+- **Choice**: GraphML export and Streamlit UI vs. simple text output or logging
+- **Trade-off**: Interpretability and presentation vs. development and maintenance overhead
+- **Benefit**: Clear causal narratives for teaching, demos, and debugging
+- **Cost**: Additional dependencies and UI complexity
+
+**Comprehensive Testing vs. Development Speed**
+- **Choice**: Reproducible CLI runs and extensive test suite vs. minimal testing
+- **Trade-off**: Reliability and CI friendliness vs. development and maintenance overhead
+- **Benefit**: Confidence to extend/modify without regressions
+- **Cost**: More test code to maintain and potential over-testing
 
 **Readability Emphasis**: Clean separation (engine handles dynamics, graph handles structure, compiler handles authoring), comprehensive docstrings, and modular design prioritize maintainability. YAML scripts are declarative and human-readable, while Python code uses clear naming and single-responsibility functions.
 
-**Testability Focus**: Extensive test suite covers edge cases, synthetic scenes enable controlled experimentation, and configuration knobs allow systematic parameter sweeps. This makes the system reliable and scientifically reproducible, though it adds complexity that pure performance implementations might avoid.
-
 These design choices create a system that's easier to understand, debug, and extend than raw performance would allow, making it ideal for research and education while still demonstrating practical active perception capabilities.
 
-## Differences vs Original Paper (What, Why, Benefit)
-
-- **Four-phase update cycle**
-  - What: Split the paper’s processing into Propagation → State Update → Message Delivery → Second Message Processing.
-  - Why: Remove race conditions and make within-step causality explicit and deterministic.
-  - Benefit: Reproducible traces and easier debugging; defensible 4-phase variant mapped to the paper’s single processing phase.
-
-- **Deterministic iteration order**
-  - What: Sorted processing of units/messages (configurable).
-  - Why: Ensure identical behavior across runs/platforms.
-  - Benefit: Stable demos/tests; clear, comparable experiments.
-
-- **Declarative YAML → graph compiler**
-  - What: Compile `scripts/*.yaml` into SUB/SUR hierarchies and POR/RET sequences.
-  - Why: Separate authoring from execution; speed up iteration.
-  - Benefit: Readable scripts, reuse of parts, quick scenario swaps (house/barn).
-
-- **Configurable confirmation ratio and edge weights**
-  - What: Parameterize AND/OR behavior via `confirmation_ratio` and weighted children.
-  - Why: Explore structural logic without code changes.
-  - Benefit: Flexible modeling; clearer ablations.
-
-- **RET feedback toggle**
-  - What: Option to let failed successors demote confirmed predecessors.
-  - Why: Control temporal coupling strength.
-  - Benefit: Compare strict vs. permissive sequencing behaviors.
-
-- **Lightweight synthetic perception + optional autoencoder**
-  - What: Simple filters/geometric features with optional denoising AE features.
-  - Why: Prioritize clarity/speed over heavy CV.
-  - Benefit: Real-time demos and interpretable evidence signals.
-
-- **Metrics and instrumentation**
-  - What: Request counts, first-step timings, convenience metrics.
-  - Why: Quantify “active” efficiency and progress.
-  - Benefit: Measurable improvements; easier analysis.
-
-- **Comprehensive graph validation + health scoring**
-  - What: Cycle, link-consistency, relationships, integrity, performance analysis.
-  - Why: Prevent invalid graphs and surface bottlenecks.
-  - Benefit: Robustness and actionable feedback during authoring.
-
-- **GraphML export and Streamlit UI**
-  - What: Export to external tools; interactive visualization of states/messages.
-  - Why: Improve interpretability and presentation.
-  - Benefit: Clear causal narratives for teaching, demos, and debugging.
-
-- **CLI workflow and tests**
-  - What: Reproducible CLI runs and a test suite.
-  - Why: Reliability and CI friendliness.
-  - Benefit: Confidence to extend/modify without regressions.
 
 ## Dataset & Terminals
 
@@ -242,13 +245,6 @@ These design choices create a system that's easier to understand, debug, and ext
 - Mapping from features to terminal units used in the demo(s).
 
 Rationale: synthetic glyph-like scenes make object structure explicit (e.g., roof above body; door inside body), highlighting ReCoN's strengths in representing part relations and temporal checks. Terminals provide simple, explainable feature activations; an optional denoising autoencoder can supply compact learned features when enabled.
-
-## Visualization & UX
-
-- What the Streamlit app shows: graph states, message flow, scene overlays, step/run controls.
-- How the visualization reveals causality (requests, confirmations, failures, sequencing).
-
-The UI presents the network graph with nodes colored by state and animated message edges, alongside the current scene and overlays for detected terminals. Controls allow single-step, run/pause, and reset. This pairing makes it easy to see which requests were issued, which evidence arrived, and why a script confirmed or failed.
 
 ## Graph Validation System
 
@@ -302,25 +298,6 @@ graph = compile_from_file('scripts/house.yaml')
 graph.export_graphml('output/house_network.graphml')
 ```
 
-## Experiments & Results
-
-- Qualitative traces: step-by-step sequences on house and barn scenes showing selective SUR requests, confirmations via SUB, and POR-driven sequencing (e.g., roof → body → door).
-- Stressors: occlusion and added noise to illustrate failure cases and how inhibition/ordering affect behavior.
-- Toggles: with/without POR; different confirmation ratios; deterministic vs. nondeterministic ordering.
-- Validation testing: Comprehensive validation system tested with intentionally problematic graphs, successfully detecting all categories of structural issues.
-
-## Evaluation vs. CIMC Criteria
-
-- Implemented a novel theoretical idea → faithful ReCoN with tests and docs.
-- Translation between representation and UI → interactive visualization + CLI.
-- Active perception exhibited → selective terminal requests, temporal sequencing.
-- Bonus (if applicable) → learning utilities, format conversion, metrics suite, comprehensive graph validation system with cycle detection, performance monitoring, and health scoring.
-
-## Limitations & Future Work
-
-- Current constraints (noise robustness, scaling, learned structure), and practical limitations.
-- Next steps: richer perception (CNNs), learning SUB/SUR/POR/RET, multi-modal, real-time.
-
 ## How to Run Tests
 
 ```bash
@@ -354,14 +331,3 @@ engine = Engine(graph, config=cfg)
   - `RECON_TRAIN_CNN=1` to enable TinyCNN training; `RECON_TRAIN_CNN_EPOCHS` (default 10)
   - `RECON_MODEL_DIR` to set model cache directory (default `~/.cache/recon`)
 
-## Submission Artifacts
-
-- Source code, `requirements.txt`, and this `SUBMISSION.md`.
-- Demo video link and a few screenshots from the Streamlit UI.
-- Example YAML scripts in `scripts/` (e.g., `house.yaml`, `barn.yaml`).
-- Reproducibility notes (Python version, OS; no GPU required).
-
-## Acknowledgements
-
-- "Request Confirmation Networks for Active Object Recognition" (CoCoNIPS 2015). See `CoCoNIPS_2015_paper_6.pdf`.
-- Libraries and tools used (Streamlit, NumPy, etc.).

@@ -227,7 +227,7 @@ class BaseReconScene(Scene):
 
     def animate_message_between_nodes(self, src_node: NodeViz, dst_node: NodeViz, message_text: str, color, duration: float):
         """Animate a labeled message traveling from `src_node` to `dst_node`."""
-        msg_text = Text(message_text, font_size=10, color=color)
+        msg_text = Text(message_text, font_size=12, color=color)
 
         src_center = src_node.shape.get_center()
         dst_center = dst_node.shape.get_center()
@@ -259,6 +259,45 @@ class BaseReconScene(Scene):
                 FadeOut(msg_text),
                 FadeIn(dst_highlight),
                 dst_node.shape.animate.set_fill(color, opacity=0.2),
+                lag_ratio=0.0,
+                run_time=duration * 0.2,
+            ),
+            lag_ratio=1.0,
+        )
+
+    def animate_message_to_root(self, src_node: NodeViz, dst_node: NodeViz, message_text: str, color, duration: float):
+        """Animate a labeled message traveling from `src_node` to `dst_node` without destination highlighting.
+        
+        This version is designed for multiple simultaneous messages to the same destination
+        to avoid conflicting highlight animations.
+        """
+        msg_text = Text(message_text, font_size=12, color=color)
+
+        src_center = src_node.shape.get_center()
+        dst_center = dst_node.shape.get_center()
+
+        direction = dst_center - src_center
+        distance = np.linalg.norm(direction)
+
+        if distance > 0:
+            direction = direction / distance
+            start_point = _get_shape_edge_point(src_node, direction)
+            end_point = _get_shape_edge_point(dst_node, -direction)
+        else:
+            start_point = src_center
+            end_point = dst_center
+
+        msg_text.move_to(start_point)
+
+        return AnimationGroup(
+            AnimationGroup(
+                FadeIn(msg_text),
+                msg_text.animate.move_to(end_point),
+                lag_ratio=0.0,
+                run_time=duration * 0.8,
+            ),
+            AnimationGroup(
+                FadeOut(msg_text),
                 lag_ratio=0.0,
                 run_time=duration * 0.2,
             ),

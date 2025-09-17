@@ -192,6 +192,20 @@ class Graph:
         """
         return [e.dst for e in self.out_edges[u_id] if e.type == LinkType.POR]
 
+    def por_predecessors(self, u_id: str) -> List[str]:
+        """
+        Get IDs of predecessor units connected via POR (temporal precedence) links.
+
+        POR links define sequential ordering in temporal processes.
+
+        Args:
+            u_id: ID of the successor unit
+
+        Returns:
+            List of predecessor unit IDs connected via POR links
+        """
+        return [e.src for e in self.in_edges[u_id] if e.type == LinkType.POR]
+
     def sur_children(self, parent_id: str) -> List[str]:
         """
         Get IDs of child units connected via SUR (request) links.
