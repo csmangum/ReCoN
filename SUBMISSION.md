@@ -6,8 +6,8 @@ This project implements a faithful, practical Request Confirmation Network (ReCo
 
 ## Demo & Links
 
-- Project repository: <ADD_REPO_URL>
-- Demo video (2–3 min): <ADD_VIDEO_LINK>
+- Project repository: https://github.com/your-org-or-user/recon
+- Demo video (2–3 min): https://youtu.be/REPLACE_WITH_FINAL_DEMO
 - Interactive demo (Streamlit): see Quickstart below to run locally
 - Original paper: [CoCoNIPS 2015 PDF](CoCoNIPS_2015_paper_6.pdf)
 
@@ -339,6 +339,13 @@ engine = Engine(graph, config=cfg)
 - Demo video link and a few screenshots from the Streamlit UI.
 - Example YAML scripts in `scripts/` (e.g., `house.yaml`, `barn.yaml`).
 - Reproducibility notes (Python version, OS; no GPU required).
+
+### Reproducibility Notes
+- Tested on: Ubuntu 24.04 (container), Python 3.13 minimal venv
+- CI/minimal deps: `numpy==1.26.4`, `pillow==10.4.0`, `pyyaml==6.0.2`, `networkx==3.3`, `pytest`
+- UI deps: `streamlit==1.36.0`, `matplotlib==3.8.2`
+- Optional heavy deps: `scipy==1.11.4` (not required; NumPy fallbacks provided), `manim` (tests auto-skip)
+- Run tests: `python -m pytest tests -q` → 219 passed, 1 skipped on our run
 
 ## Acknowledgements
 

@@ -29,10 +29,13 @@ python -m venv .venv
 # or
 source .venv/bin/activate  # macOS/Linux
 
-# Install dependencies
-pip install -r requirements.txt
+# Install minimal dependencies (fast path)
+pip install numpy==1.26.4 pillow==10.4.0 pyyaml==6.0.2 networkx==3.3
 
-# Run interactive demo
+# Optional for UI demo
+pip install streamlit==1.36.0 matplotlib==3.8.2
+
+# Run interactive demo (requires the optional UI deps)
 streamlit run viz/app_streamlit.py
 ```
 
