@@ -1,0 +1,16 @@
+object: house
+children:
+  - id: roof
+    type: AND
+    parts: [t_horz]
+  - id: body
+    type: AND
+    parts: [t_mean]
+  - id: door
+    type: OR
+    parts: [t_vert, t_mean]
+sequence:
+  - roof
+  - body
+  - door
+
