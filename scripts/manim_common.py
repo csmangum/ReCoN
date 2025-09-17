@@ -33,6 +33,12 @@ from recon_core.enums import LinkType, UnitType
 
 
 class NodeViz:
+    """Lightweight wrapper holding Manim primitives for a ReCoN node.
+
+    Renders SCRIPT units as circles and TERMINAL units as squares, with an
+    optional activation meter arc around the node. Provides convenience
+    helpers to position and update visuals.
+    """
     def __init__(self, label: str, unit_type=None, color=WHITE, radius=0.4):
         display_label = label
         if label.startswith("u_"):
@@ -90,6 +96,11 @@ class NodeViz:
 
 
 def _get_shape_edge_point(node: NodeViz, direction: np.ndarray) -> np.ndarray:
+    """Return the point on a node's outline in the given direction vector.
+
+    For circles this is a simple radius-scale; for squares we approximate the
+    ray/edge intersection to start and end arrows neatly at the borders.
+    """
     center = node.shape.get_center()
 
     if isinstance(node.shape, Square):
@@ -149,6 +160,7 @@ def _get_shape_edge_point(node: NodeViz, direction: np.ndarray) -> np.ndarray:
 
 
 def edge_arrow(src: NodeViz, dst: NodeViz, color=WHITE, dashed=False) -> Mobject:
+    """Create an arrow or dashed line from `src` to `dst` node visuals."""
     src_center = src.shape.get_center()
     dst_center = dst.shape.get_center()
 
@@ -171,6 +183,7 @@ def edge_arrow(src: NodeViz, dst: NodeViz, color=WHITE, dashed=False) -> Mobject
 
 
 def gradient_edge_arrow(src: NodeViz, dst: NodeViz, color=WHITE, num_segments=20) -> Mobject:
+    """Create a segmented line with increasing opacity from src to dst."""
     src_center = src.shape.get_center()
     dst_center = dst.shape.get_center()
 
@@ -204,13 +217,16 @@ def gradient_edge_arrow(src: NodeViz, dst: NodeViz, color=WHITE, num_segments=20
 
 
 class BaseReconScene(Scene):
+    """Base Manim scene with utilities to draw ReCoN nodes/edges/messages."""
     def create_highlight_shape(self, node: NodeViz, color, stroke_width=2):
+        """Return a highlight outline sized to the given node shape."""
         if hasattr(node, "unit_type") and node.unit_type == UnitType.TERMINAL:
             return Square(side_length=node.radius * 2 + 0.1, color=color, stroke_width=stroke_width)
         else:
             return Circle(radius=node.radius + 0.05, color=color, stroke_width=stroke_width)
 
     def animate_message_between_nodes(self, src_node: NodeViz, dst_node: NodeViz, message_text: str, color, duration: float):
+        """Animate a labeled message traveling from `src_node` to `dst_node`."""
         msg_text = Text(message_text, font_size=10, color=color)
 
         src_center = src_node.shape.get_center()
@@ -250,6 +266,7 @@ class BaseReconScene(Scene):
         )
 
     def build_nodes(self, g, node_positions: Dict[str, Tuple[float, float, float]]) -> Tuple[Dict[str, NodeViz], Group]:
+        """Construct `NodeViz` objects for all units at specified positions."""
         nodes: Dict[str, NodeViz] = {}
         for uid, pos in node_positions.items():
             n = NodeViz(uid, unit_type=g.units[uid].kind).move_to(pos)
@@ -260,6 +277,7 @@ class BaseReconScene(Scene):
         return nodes, node_group
 
     def compute_edges(self, g, nodes: Dict[str, NodeViz]) -> Tuple[List[Mobject], List[Tuple[str, str]], List[Tuple[str, str]], List[Tuple[str, str]]]:
+        """Compute drawable edge mobjects and return lists grouped by link type."""
         background_edges: List[Mobject] = []
         sur_edges: List[Tuple[str, str]] = []
         sub_edges: List[Tuple[str, str]] = []

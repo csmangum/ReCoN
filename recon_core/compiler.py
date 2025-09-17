@@ -29,9 +29,10 @@ Notes:
 - We wire: terminal -> script via SUB, script -> terminal via SUR.
 - Parent script (root) <-> child scripts via SUR (parent->child) and SUB
   (child->parent).
-- For `sequence`, we accept either symbolic step names or child IDs; when
-  child IDs are present, we create POR edges roof->body->door between
-  corresponding script units. Symbolic steps are currently ignored.
+- For `sequence`, we accept either child IDs or free-form step text. Child IDs
+  are used directly. For free-form text, we scan each step for mentions of child
+  IDs in textual order and create POR edges between the corresponding child
+  script units (e.g., "first roof then body" yields `u_roof -> u_body`).
 """
 
 from __future__ import annotations
@@ -45,6 +46,11 @@ from .graph import Edge, Graph, Unit
 
 
 def _ensure_unit(g: Graph, unit_id: str, kind: UnitType) -> Unit:
+    """Get or create a `Unit` of the given kind in graph `g`.
+
+    Ensures `g.units[unit_id]` exists with the specified `kind`, initializing
+    its state and activation if newly created.
+    """
     if unit_id in g.units:
         return g.units[unit_id]
     u = Unit(unit_id, kind, state=State.INACTIVE, a=0.0)
