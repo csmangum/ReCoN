@@ -13,7 +13,7 @@ A faithful, comprehensive **Request Confirmation Network** (ReCoN) implementatio
 - **Interactive Visualization**: Real-time network dynamics
 - **Graph Validation**: Comprehensive validation of network structure and integrity
 - **Extensible Architecture**: Clean separation for custom applications
-- **Comprehensive Testing**: Full test coverage for reliability
+- **Comprehensive Test Suite**: Broad tests across core, compiler, perception, metrics
 
 ## 📖 Documentation
 
@@ -65,7 +65,7 @@ recon_core/
   metrics.py      # (Day 6) metrics helpers and engine.stats accessors
 perception/
   dataset.py      # synthetic 2D scenes with variety (houses, barns, occlusion)
-  terminals.py    # comprehensive terminal features (filters + SIFT + autoencoder)
+  terminals.py    # comprehensive terminals (filters + SIFT-like + autoencoder + engineered [+ optional TinyCNN])
 scripts/
   house.yaml                    # script → recon graph compiler input
   graph_validation_demo.py      # comprehensive graph validation demonstration
@@ -105,9 +105,10 @@ If your environment cannot install heavy test dependencies, use the lightweight 
 python3 run_tests.py
 ```
 
-### Training flag for autoencoder terminals
+### Training flags (feature extractors)
 
-- Set `RECON_TRAIN_AE=1` to enable on-demand training of the perception autoencoder. By default training is disabled to keep environments lightweight.
+- Set `RECON_TRAIN_AE=1` to enable autoencoder training for AE-based terminals (disabled by default).
+- Set `RECON_TRAIN_CNN=1` to enable TinyCNN training for CNN-based terminals (disabled by default).
 
 ### Engine configuration
 
@@ -129,10 +130,11 @@ engine = Engine(graph, config=cfg)
 
 **Metrics (Day 6)**
 
-- Engine now records metrics in `engine.snapshot()['stats']`:
+- Engine records metrics in `engine.snapshot()['stats']`:
   - `terminal_request_count`: total SUR requests to TERMINALs
   - `terminal_request_counts_by_id`: per-terminal request counts
-  - `first_true_step`, `first_confirm_step`: timing of key events
+  - `first_request_step`, `first_active_step`: script timing
+  - `first_true_step`, `first_confirm_step`: key terminal/script events
 
 - Convenience helpers in `recon_core.metrics`:
   - `binary_precision_recall(y_true, y_pred)`
@@ -159,14 +161,15 @@ print(binary_precision_recall([1,0,1],[1,1,0]))
 
 Configuration notes:
 
-- Gate constants (SUB/SUR/POR/RET) are implemented with concrete defaults matching the paper’s qualitative behavior and are configurable via `EngineConfig`.
-- Optional per-link minimal source activation thresholds can be set to suppress propagation unless the source activation exceeds a chosen value: `sub_min_source_activation`, `sur_min_source_activation`, `por_min_source_activation`, `ret_min_source_activation` (all default to 0.0 to preserve baseline behavior).
+- Gate constants (SUB/SUR/POR/RET) default to `(+1/-1, +0.3/-0.3, +0.5/-0.5, +0.2/-0.5)` and are configurable via `EngineConfig`.
+- Optional per-link minimal source activation thresholds can suppress propagation unless the source activation exceeds a chosen value: `sub_min_source_activation`, `sur_min_source_activation`, `por_min_source_activation`, `ret_min_source_activation` (all default to 0.0 to preserve baseline behavior).
 
-**50+ tests** covering:
-- **18 synthetic scene tests**: Drawing primitives, house/barn generation, occlusion, variations
-- **26 terminal feature tests**: Basic filters, SIFT-like features, autoencoder, integration
-- **10 graph validation tests**: Cycle detection, link consistency, activation bounds, performance metrics
-- **Original core tests**: State transitions, message passing, inhibition, temporal sequencing
+Tests cover:
+- Engine transitions, compact arithmetic, message passing, sequencing
+- Script compiler (YAML→graph), POR sequencing, SUR/SUB wiring
+- Perception pipeline (filters, SIFT-like, autoencoder, engineered terminals, optional TinyCNN)
+- Metrics recording and convenience helpers
+- Graph validation (cycles, link consistency, activation bounds, integrity, performance)
 
 ### Graph Validation Features
 
@@ -233,6 +236,7 @@ from perception.terminals import comprehensive_terminals_from_image
 house_scene = make_varied_scene('house', size=64, noise=0.1)
 barn_scene = make_varied_scene('barn', size=64) 
 occluded_scene = make_varied_scene('occluded', size=64)
+
 
 # Extract comprehensive features (21 terminals: 12 advanced + 4 AE + 5 engineered)
 features = comprehensive_terminals_from_image(house_scene)
