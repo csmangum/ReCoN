@@ -17,7 +17,6 @@ Enhanced interface includes:
 
 import os
 import sys
-import time
 
 # Add project root to Python path BEFORE any imports
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -82,7 +81,7 @@ class ReCoNSimulation:
         for term_id in ["t_mean", "t_vert", "t_horz"]:
             g.add_unit(
                 Unit(
-                    term_id, UnitType.TERMINAL, state=State.INACTIVE, a=0.0, thresh=0.5
+                    term_id, UnitType.TERMINAL, state=State.INACTIVE, a=0.0, thresh=0.005
                 )
             )
         # hierarchy: terminals -> scripts via SUB; parent -> child via SUR
@@ -166,7 +165,7 @@ class ReCoNSimulation:
         for term_id, _ in terminals.items():
             self.graph.add_unit(
                 Unit(
-                    term_id, UnitType.TERMINAL, state=State.INACTIVE, a=0.0, thresh=0.5
+                    term_id, UnitType.TERMINAL, state=State.INACTIVE, a=0.0, thresh=0.005
                 )
             )
             parent = self._choose_parent_for_terminal(term_id)
@@ -246,11 +245,47 @@ class ReCoNSimulation:
         return snap
 
     def reset_simulation(self):
-        """Reset the simulation to initial state."""
+        """Reset the simulation to initial state completely."""
+        # Reset engine state
         self.engine.reset()
+        
+        # Clear all history and tracking
         self.history = []
         self.message_history = []
         self.fovea_path = [(32, 32)]
+        
+        # Reset all units to inactive state with zero activation
+        for unit in self.graph.units.values():
+            unit.state = State.INACTIVE
+            unit.a = 0.0
+            # Clear message queues
+            unit.inbox = []
+            unit.outbox = []
+        
+        # Reset engine time
+        self.engine.t = 0
+        
+        return self.engine.snapshot()
+    
+    def reset_simulation_only(self):
+        """Reset only the simulation state without changing graph structure."""
+        return self.reset_simulation()
+    
+    def reset_completely(self):
+        """Reset everything including scene, terminals, and all state."""
+        # Reset simulation state
+        self.reset_simulation()
+        
+        # Restore initial graph structure (recreate the basic terminals)
+        self.graph = self.init_graph()
+        self.engine = Engine(self.graph)
+        
+        # Clear scene data
+        if hasattr(self, 'current_scene'):
+            delattr(self, 'current_scene')
+        if hasattr(self, 'current_terminals'):
+            delattr(self, 'current_terminals')
+        
         return self.engine.snapshot()
 
 
@@ -291,7 +326,15 @@ with st.sidebar:
             st.session_state.snap = st.session_state.sim.engine.snapshot()
     with col_scene_reset:
         if st.button("🔄 Reset", use_container_width=True):
-            st.session_state.snap = st.session_state.sim.reset_simulation()
+            # Complete reset of simulation and session state
+            st.session_state.snap = st.session_state.sim.reset_completely()
+            # Clear session state variables
+            if 'img' in st.session_state:
+                del st.session_state['img']
+            if 'tvals' in st.session_state:
+                del st.session_state['tvals']
+            # Force rerun to clear all visualizations
+            st.rerun()
 
     st.divider()
 
@@ -337,7 +380,7 @@ col_scene, col_graph = st.columns([1, 1.2])
 with col_scene:
     st.subheader("🏠 Scene with Fovea Path")
 
-    # Get current scene
+    # Get current scene - show empty scene if no scene has been generated
     current_img = st.session_state.get("img", np.zeros((64, 64), dtype=np.float32))
 
     # Create visualization with fovea path and overlays
@@ -347,6 +390,12 @@ with col_scene:
 
     # Scene with overlays
     ax_scene.imshow(current_img, cmap="gray", extent=[0, 64, 64, 0])
+    
+    # Add text overlay if no scene has been generated
+    if 'img' not in st.session_state:
+        ax_scene.text(32, 32, "No Scene Generated\nClick 'Generate' to start", 
+                     ha='center', va='center', fontsize=12, 
+                     bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8))
 
     # Draw fovea path
     if len(st.session_state.sim.fovea_path) > 1:
@@ -439,6 +488,8 @@ with col_scene:
         cols = st.columns(num_cols)
         for i, (term_name, term_value) in enumerate(terminals_live):
             cols[i % num_cols].metric(term_name, f"{term_value:.3f}")
+    else:
+        st.info("No terminals available. Generate a scene to see terminal activations.")
 
 with col_graph:
     st.subheader("🕸️ Network Graph & Messages")
