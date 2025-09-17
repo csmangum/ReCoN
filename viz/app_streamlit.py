@@ -28,6 +28,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import streamlit as st
+from contextlib import contextmanager
 
 from perception.terminals import (
     sample_scene_and_terminals,
@@ -216,26 +217,25 @@ class ReCoNSimulation:
 
     def step_simulation(self, n_steps=1):
         """Step the simulation forward and record history."""
-        # Capture messages delivered during this step by wrapping Engine.send_message
         messages_this_step = []
-        original_send_message = self.engine.send_message
 
-        def tracking_send_message(sender_id, receiver_id, message):
+        @contextmanager
+        def patch_send_message(engine, on_send):
+            original = engine.send_message
+            def wrapper(sender_id, receiver_id, message):
+                on_send(sender_id, receiver_id, message)
+                return original(sender_id, receiver_id, message)
+            engine.send_message = wrapper  # type: ignore
             try:
-                messages_this_step.append((sender_id, receiver_id, message))
-            except Exception:
-                pass
-            return original_send_message(sender_id, receiver_id, message)
+                yield
+            finally:
+                engine.send_message = original  # type: ignore
 
-        # Monkey-patch send_message to record deliveries during this step
-        self.engine.send_message = tracking_send_message  # type: ignore
+        def on_send(sender_id, receiver_id, message):
+            messages_this_step.append((sender_id, receiver_id, message))
 
-        try:
-            # Step the simulation
+        with patch_send_message(self.engine, on_send):
             snap = self.engine.step(n_steps)
-        finally:
-            # Restore original method even if step raises
-            self.engine.send_message = original_send_message  # type: ignore
 
         # Update fovea path (simulate scanning behavior)
         if self.graph.units["u_root"].state == State.ACTIVE:
@@ -885,7 +885,7 @@ if selected_unit:
         st.metric("Unit", selected_unit)
     with col_state:
         state_color = {
-            "INACTIVE": "⚪",
+            "INACTIVE": "🟢",
             "REQUESTED": "🔵",
             "WAITING": "🟡",
             "ACTIVE": "🟣",
