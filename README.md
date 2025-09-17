@@ -234,11 +234,12 @@ house_scene = make_varied_scene('house', size=64, noise=0.1)
 barn_scene = make_varied_scene('barn', size=64) 
 occluded_scene = make_varied_scene('occluded', size=64)
 
-# Extract comprehensive features (16 terminals)
+# Extract comprehensive features (21 terminals: 12 advanced + 4 AE + 5 engineered)
 features = comprehensive_terminals_from_image(house_scene)
 print(f"Basic: mean={features['t_mean']:.3f}, edges={features['t_vert']:.3f}")
 print(f"SIFT: corners={features['t_corners']:.3f}, grad_mag={features['t_edges']:.3f}")
-print(f"Autoencoder: {features['t_ae_0']:.3f}, {features['t_ae_1']:.3f}")
+print(f"AE: {features['t_ae_0']:.3f}, {features['t_ae_1']:.3f}")
+print(f"Extra: vsym={features['t_vsym']:.3f}, rect={features['t_rect']:.3f}")
 ```
 
 ## 🔧 Architecture Notes
