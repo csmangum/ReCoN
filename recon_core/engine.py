@@ -369,6 +369,13 @@ class Engine:
                             )
                     self._sur_requested_parents.add(uid)
 
+                # Check POR predecessors - can only become ACTIVE if all predecessors are CONFIRMED
+                por_predecessors = self.g.por_predecessors(u.id)
+                all_predecessors_confirmed = all(
+                    self.g.units[pred_id].state == State.CONFIRMED
+                    for pred_id in por_predecessors
+                ) if por_predecessors else True
+                
                 # Check if enough children are TRUE to confirm (for both REQUESTED->ACTIVE and existing ACTIVE/CONFIRMED)
                 if u.state in (State.ACTIVE, State.CONFIRMED):
                     child_ids = self.g.sub_children(u.id)
@@ -386,10 +393,12 @@ class Engine:
                         else 0
                     )
 
+                    # Can only confirm if all POR predecessors are confirmed AND children criteria met
                     if (
                         child_ids
                         and trues >= need
                         and not failed
+                        and all_predecessors_confirmed
                         and u.state != State.CONFIRMED
                     ):
                         u.state = State.CONFIRMED
