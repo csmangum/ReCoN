@@ -84,8 +84,10 @@ class TestCompileFromDict:
 
         # Only valid child should be present
         assert "u_ok" in g.units
-        # Ensure no unit with blank/None id slipped in
-        assert all(uid and not uid.startswith("u_") or uid in g.units for uid in g.units)
+        # Ensure no unit with blank or None id exists
+        assert all(uid for uid in g.units), "Found unit with blank or None id in g.units"
+        # Ensure expected naming for compiled script units (root + child)
+        assert any(uid.startswith("u_") for uid in g.units), "Expected at least one script id starting with 'u_'"
 
 
 class TestCompileFromYamlAndFile:
