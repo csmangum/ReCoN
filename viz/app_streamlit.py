@@ -30,16 +30,7 @@ import numpy as np
 import streamlit as st
 from contextlib import contextmanager
 
-from perception.terminals import (
-    sample_scene_and_terminals,
-    advanced_terminals_from_image,
-    autoencoder_terminals_from_image,
-    comprehensive_terminals_from_image,
-    deep_comprehensive_terminals_from_image,
-    cnn_terminals_from_image,
-    get_autoencoder,
-    get_cnn,
-)
+from perception.terminals import sample_scene_and_terminals
 from perception.dataset import make_house_scene
 from recon_core.engine import Engine
 from recon_core.enums import LinkType, State, UnitType
@@ -59,7 +50,7 @@ plt.style.use("seaborn-v0_8-whitegrid")
 st.markdown(
     """
     <style>
-    .block-container { padding-top: 0.5rem; padding-bottom: 2rem; }
+    .block-container { padding-top: 3rem; padding-bottom: 2rem; }
     [data-testid="stSidebar"] { background-color: rgba(15, 23, 42, 0.03); }
     div[data-testid="stMetricValue"] { font-size: 1.3rem; }
     div[data-testid="stMetricLabel"] { color: #64748b; }
@@ -79,7 +70,6 @@ class ReCoNSimulation:
         self.history = []  # Store snapshots for timeline
         self.message_history = []  # Store message flows for animation
         self.fovea_path = []  # Track fovea/scanning positions
-        self.is_running = False
         self.max_history = 100
 
     def init_graph(self):
@@ -188,23 +178,10 @@ class ReCoNSimulation:
             u.a = float(term_val)
             u.state = State.REQUESTED if term_val > 0.1 else State.INACTIVE
 
-    def generate_scene(self, feature_source: str = "Basic"):
-        """Generate a new scene and initialize terminals based on selected feature source."""
+    def generate_scene(self):
+        """Generate a new scene and initialize terminals using Basic feature source."""
         img = make_house_scene()
-        if feature_source == "Basic":
-            _, tvals = sample_scene_and_terminals()
-        elif feature_source == "Advanced":
-            tvals = advanced_terminals_from_image(img)
-        elif feature_source == "Autoencoder":
-            tvals = autoencoder_terminals_from_image(img)
-        elif feature_source == "CNN":
-            tvals = cnn_terminals_from_image(img)
-        elif feature_source == "Comprehensive":
-            tvals = comprehensive_terminals_from_image(img)
-        elif feature_source == "Deep Comprehensive":
-            tvals = deep_comprehensive_terminals_from_image(img)
-        else:
-            _, tvals = sample_scene_and_terminals()
+        _, tvals = sample_scene_and_terminals()
 
         self._rebuild_terminals(tvals)
         self.graph.units["u_root"].a = 1.0
@@ -291,62 +268,16 @@ if "sim" not in st.session_state:
 st.title("🖼️ Request Confirmation Network — Interactive Demo")
 
 # Sidebar: refined control panel
-if "run_delay" not in st.session_state:
-    st.session_state.run_delay = 0.5
-
 with st.sidebar:
     st.header("🎛️ Controls")
 
     # Scene controls
     st.caption("Scene")
-    # Feature source selection
-    feature_source = st.selectbox(
-        "Feature source",
-        [
-            "Basic",
-            "Advanced",
-            "Autoencoder",
-            "CNN",
-            "Comprehensive",
-            "Deep Comprehensive",
-        ],
-        index=0,
-        help="Choose which feature extractor to seed terminal activations with.",
-    )
-
-    # Training controls
-    with st.expander("Training (AE/CNN)"):
-        col_train_ae, col_train_cnn = st.columns(2)
-        with col_train_ae:
-            ae_epochs = st.number_input(
-                "AE epochs", min_value=1, max_value=200, value=10, step=1
-            )
-            if st.button("Train AE", use_container_width=True):
-                # Validate epochs value before setting environment variable
-                if isinstance(ae_epochs, (int, float)) and 1 <= ae_epochs <= 200:
-                    os.environ["RECON_TRAIN_AE_EPOCHS"] = str(int(ae_epochs))
-                    # Force retrain regardless of env gate
-                    _ = get_autoencoder(retrain=True)
-                    st.success("Autoencoder trained and cached.")
-                else:
-                    st.error("Epochs value must be an integer between 1 and 200.")
-        with col_train_cnn:
-            cnn_epochs = st.number_input(
-                "CNN epochs", min_value=1, max_value=200, value=5, step=1
-            )
-            if st.button("Train CNN", use_container_width=True):
-                # Validate epochs value before setting environment variable
-                if isinstance(cnn_epochs, (int, float)) and 1 <= cnn_epochs <= 200:
-                    os.environ["RECON_TRAIN_CNN_EPOCHS"] = str(int(cnn_epochs))
-                    _ = get_cnn(retrain=True)
-                    st.success("TinyCNN trained and cached.")
-                else:
-                    st.error("Epochs value must be an integer between 1 and 200.")
 
     col_scene_gen, col_scene_reset = st.columns(2)
     with col_scene_gen:
         if st.button("🎲 Generate Scene", type="primary", use_container_width=True):
-            img, terminal_vals = st.session_state.sim.generate_scene(feature_source)
+            img, terminal_vals = st.session_state.sim.generate_scene()
             st.session_state.img = img
             st.session_state.tvals = terminal_vals
             st.session_state.snap = st.session_state.sim.engine.snapshot()
@@ -358,22 +289,8 @@ with st.sidebar:
 
     # Playback controls
     st.caption("Playback")
-    col_step, col_runpause = st.columns(2)
-    with col_step:
-        if st.button("⏭️ Step", use_container_width=True):
-            st.session_state.snap = st.session_state.sim.step_simulation(1)
-    with col_runpause:
-        run_label = "▶️ Run" if not st.session_state.sim.is_running else "⏸️ Pause"
-        if st.button(run_label, type="primary", use_container_width=True):
-            st.session_state.sim.is_running = not st.session_state.sim.is_running
-
-    speed_choice = st.select_slider(
-        "Speed",
-        options=["Slow", "Normal", "Fast"],
-        value=get_speed_label_from_delay(st.session_state.run_delay),
-        help="Controls auto-run speed",
-    )
-    st.session_state.run_delay = SPEED_DELAY_MAPPING[speed_choice]
+    if st.button("⏭️ Step", use_container_width=True):
+        st.session_state.snap = st.session_state.sim.step_simulation(1)
 
     st.divider()
 
@@ -405,12 +322,6 @@ with st.sidebar:
         unit_options,
         index=unit_options.index("u_root") if "u_root" in unit_options else 0,
     )
-
-# Auto-run logic (uses the chosen speed)
-if st.session_state.sim.is_running:
-    st.session_state.snap = st.session_state.sim.step_simulation(1)
-    time.sleep(st.session_state.get("run_delay", 0.5))
-    st.rerun()
 
 # Main display
 col_scene, col_graph = st.columns([1, 1.2])
