@@ -136,23 +136,43 @@ for uid in self.g.units:
 ```
 recon_core/
 ├── __init__.py
-├── enums.py          # State, Message, LinkType, UnitType definitions
-├── graph.py          # Unit, Edge, Graph data structures
-├── engine.py         # Core ReCoN simulation engine
-└── learn.py          # Optional learning utilities
+├── enums.py           # State, Message, LinkType, UnitType definitions
+├── graph.py           # Unit, Edge, Graph data structures + validation/export
+├── engine.py          # Core ReCoN simulation engine
+├── config.py          # Tunable EngineConfig defaults and policies
+├── compiler.py        # YAML→Graph compiler for scripted topologies
+├── metrics.py         # Runtime metrics helpers and analytics
+└── learn.py           # Optional online learning utilities
 
 perception/
 ├── __init__.py
-├── dataset.py        # Synthetic scene generation
-└── terminals.py      # Feature extraction for terminals
+├── dataset.py         # Synthetic scene generation (house, barn, occluded, etc.)
+└── terminals.py       # Feature extraction (basic, advanced, AE, CNN, engineered)
 
 viz/
 ├── __init__.py
-└── app_streamlit.py  # Interactive visualization
+└── app_streamlit.py   # Interactive visualization
+
+scripts/
+├── recon_cli.py       # CLI for compiling YAML and running the engine
+├── graph_validation_demo.py
+├── export_graphml_demo.py
+└── *.yaml              # Example object scripts (house, barn, castle, ...)
 
 tests/
 ├── __init__.py
-└── test_engine.py    # Comprehensive test suite
+├── test_engine.py
+├── test_engine_edge_cases.py
+├── test_state_machine.py
+├── test_compact_arithmetic.py
+├── test_graph.py
+├── test_message_system.py
+├── test_learn.py
+├── test_metrics.py
+├── test_terminals.py
+└── test_synthetic_scenes.py
+
+run_tests.py            # Lightweight test runner (no pytest required)
 ```
 
 ### Metrics (Day 6)
@@ -192,6 +212,30 @@ Implementation notes:
 
 - SUR requests to children are issued once per parent script activation episode to avoid over-counting.
 - Timing fields record the first step at which the state transition occurred and remain stable thereafter.
+
+### Engine Configuration
+
+The `EngineConfig` in `recon_core.config` exposes tunable parameters with sensible defaults:
+
+- Gates: `sub_positive=1.0/-1.0`, `sur_positive=0.3/-0.3`, `por_positive=0.5/-0.5`, `ret_positive=0.2/-0.5`
+- Activation integration: `activation_gain=0.8`
+- Thresholds: `script_request_activation_threshold=0.1`, `terminal_failure_threshold=0.1`, `confirmation_ratio=0.6`
+- Policies: `deterministic_order=True`, `ret_feedback_enabled=False`
+- Optional propagation guards: `sub_min_source_activation`, `sur_min_source_activation`, `por_min_source_activation`, `ret_min_source_activation` (all default 0.0)
+
+Example:
+
+```python
+from recon_core.config import EngineConfig
+
+cfg = EngineConfig(
+    sur_positive=0.25,
+    por_positive=0.6,
+    confirmation_ratio=0.7,
+    deterministic_order=True,
+    ret_feedback_enabled=True,
+)
+```
 
 ### Optional Propagation Thresholds
 
@@ -578,6 +622,22 @@ snapshot = engine.step(10)
 print(f"Root state: {snapshot['units']['root']['state']}")
 ```
 
+### Command Line Interface
+
+Use the CLI to compile a YAML script and run for N steps, printing a compact JSON snapshot:
+
+```bash
+python scripts/recon_cli.py scripts/house.yaml --steps 5 --deterministic --ret-feedback
+
+# Override gates and thresholds
+python scripts/recon_cli.py scripts/house.yaml --sur 0.25 --por 0.6 --confirm-ratio 0.7
+
+# Save summary to file
+python scripts/recon_cli.py scripts/house.yaml --steps 10 --out snapshot.json
+```
+
+Available flags (subset): `--steps`, `--out`, `--sur`, `--por`, `--ret`, `--sub`, `--confirm-ratio`, `--deterministic`, `--ret-feedback`.
+
 ### Running the Demo
 
 ```bash
@@ -593,6 +653,13 @@ The Streamlit interface provides:
 - **Step-by-Step Execution**: Watch network dynamics unfold
 - **Real-time Visualization**: See state changes and message flow
 - **Network Graph**: Interactive view of the ReCoN topology
+
+Makefile helpers:
+```bash
+make deps    # create venv + install deps
+make demo    # run Streamlit demo
+make tests   # run pytest suite
+```
 
 ### Perception Pipeline
 
@@ -623,9 +690,12 @@ varied_house = make_varied_scene('house', size=64,
 #### Comprehensive Terminal Features
 
 ```python
+from perception.dataset import make_house_scene
 from perception.terminals import comprehensive_terminals_from_image
 
 # Extract 21 terminal features (12 advanced + 4 autoencoder + 5 engineered)
+img = make_house_scene()
+features = comprehensive_terminals_from_image(img)
 
 # Basic features (3 terminals)
 print(f"Mean intensity: {features['t_mean']:.3f}")
@@ -689,6 +759,26 @@ ae_terminals = autoencoder_terminals_from_image(your_image)
 - **Decoder**: Symmetric reconstruction path
 - **Training**: Denoising reconstruction on diverse synthetic scenes (enable with env `RECON_TRAIN_AE=1` or pass `retrain=True`)
 - **Features**: Compressed patch representations averaged across image
+
+Environment variables:
+- `RECON_TRAIN_AE=1` to enable training; optional `RECON_TRAIN_AE_EPOCHS` to set epochs (default 30)
+- Model cache directory: `RECON_MODEL_DIR` (defaults to `~/.cache/recon`)
+
+#### CNN and Deep Comprehensive Terminals (Optional)
+
+The system also includes a tiny NumPy-based CNN for learned filter features and an extended "deep comprehensive" set combining all methods:
+
+```python
+from perception.terminals import cnn_terminals_from_image, deep_comprehensive_terminals_from_image
+
+img = make_house_scene()
+cnn_terms = cnn_terminals_from_image(img)                    # t_cnn_0 .. t_cnn_5
+deep_terms = deep_comprehensive_terminals_from_image(img)    # advanced + AE + CNN
+```
+
+Environment variables:
+- `RECON_TRAIN_CNN=1` to enable TinyCNN training; optional `RECON_TRAIN_CNN_EPOCHS` (default 10)
+- Shares `RECON_MODEL_DIR` cache location with the autoencoder
 
 ## Advanced Features
 
@@ -762,10 +852,10 @@ python run_tests.py
 ```
 
 Selected pytest modules:
-- `tests/test_engine.py`, `tests/test_state_machine.py`: Core engine behavior
-- `tests/test_compact_arithmetic.py`: Gate arithmetic and propagation
-- `tests/test_graph.py`, `tests/test_message_system.py`, `tests/test_learn.py`: Infrastructure and learning
-- `tests/test_terminals.py`, `tests/test_synthetic_scenes.py`: Perception pipeline
+- Core engine/state: `tests/test_engine.py`, `tests/test_engine_edge_cases.py`, `tests/test_state_machine.py`
+- Arithmetic/graph/messaging: `tests/test_compact_arithmetic.py`, `tests/test_graph.py`, `tests/test_message_system.py`
+- Learning/metrics: `tests/test_learn.py`, `tests/test_metrics.py`
+- Perception: `tests/test_terminals.py`, `tests/test_synthetic_scenes.py`, `tests/test_manim_common.py`
 
 ## Performance Characteristics
 
