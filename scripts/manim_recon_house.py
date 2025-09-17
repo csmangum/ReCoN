@@ -121,7 +121,10 @@ def _simulate_and_capture_messages(g: Graph, steps: int = 8) -> List[dict]:
 def _group_messages_by_time(captured: List[dict]) -> Dict[int, List[dict]]:
     grouped: Dict[int, List[dict]] = {}
     for m in captured:
-        t = int(m.get("t", 0))
+        try:
+            t = int(m.get("t", 0))
+        except (ValueError, TypeError):
+            t = 0
         grouped.setdefault(t, []).append(m)
     return dict(sorted(grouped.items(), key=lambda kv: kv[0]))
 
