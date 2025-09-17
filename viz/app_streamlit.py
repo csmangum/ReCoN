@@ -338,11 +338,9 @@ with st.sidebar:
             st.session_state.img = img
             st.session_state.tvals = terminal_vals
             st.session_state.snap = st.session_state.sim.engine.snapshot()
-            st.rerun()
     with col_scene_reset:
         if st.button("🔄 Reset", use_container_width=True):
             st.session_state.snap = st.session_state.sim.reset_simulation()
-            st.rerun()
 
     st.divider()
 
@@ -352,12 +350,10 @@ with st.sidebar:
     with col_step:
         if st.button("⏭️ Step", use_container_width=True):
             st.session_state.snap = st.session_state.sim.step_simulation(1)
-            st.rerun()
     with col_runpause:
         run_label = "▶️ Run" if not st.session_state.sim.is_running else "⏸️ Pause"
         if st.button(run_label, type="primary", use_container_width=True):
             st.session_state.sim.is_running = not st.session_state.sim.is_running
-            st.rerun()
 
     speed_choice = st.select_slider(
         "Speed",
