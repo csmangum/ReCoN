@@ -553,24 +553,19 @@ with col_graph:
     }
 
     # Position known terminals first
+    graph = st.session_state.sim.graph
+    units = graph.units
+    out_edges = graph.out_edges
     for term_name, position in terminal_positions.items():
-        if term_name in st.session_state.sim.graph.units:
+        if term_name in units:
             pos[term_name] = position
 
     # Position remaining terminals under their actual parent scripts via SUB links
-    all_terminals = [
-        n for n in st.session_state.sim.graph.units.keys()
-        if st.session_state.sim.graph.units[n].kind == UnitType.TERMINAL
-    ]
+    all_terminals = [uid for uid, u in units.items() if u.kind == UnitType.TERMINAL]
     remaining_terminals = [t for t in all_terminals if t not in terminal_positions]
     parent_to_terms = {}
     for term_id in remaining_terminals:
-        parents = [
-            e.dst
-            for e in st.session_state.sim.graph.out_edges.get(term_id, [])
-            if e.type == LinkType.SUB
-        ]
-        parent_id = parents[0] if parents else None
+        parent_id = next((e.dst for e in out_edges.get(term_id, []) if e.type == LinkType.SUB), None)
         parent_to_terms.setdefault(parent_id, []).append(term_id)
 
     for parent_id, terms in parent_to_terms.items():
