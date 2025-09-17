@@ -19,14 +19,17 @@ class ActivationGraphScene(ReconSceneMixin, MovingCameraScene):
             spec = graph_to_spec(stepper.g)
             graph_spec_dict = {"nodes": spec.nodes, "edges": spec.edges}
             self.build_graph(graph_spec_dict)
+            self.add_edges(graph_spec_dict)
             events = list(stepper.stream_events())
         else:
             events = list(getattr(self, "_events", []))
             # Attempt to find a GraphDeclared to build from
-            graph_decl = next((e for e in events if getattr(e, "__class__", None).__name__ == "GraphDeclared"), None)
+            from recon_anim.models.events import GraphDeclared
+            graph_decl = next((e for e in events if isinstance(e, GraphDeclared)), None)
             if graph_decl is not None:
                 graph_spec_dict = getattr(graph_decl, "graph", {})
                 self.build_graph(graph_spec_dict)
+                self.add_edges(graph_spec_dict)
 
         # Add legend overlay
         self.add_legend()

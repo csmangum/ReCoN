@@ -36,7 +36,7 @@ def render_scene(scene_cls: Type[ActivationGraphScene], yaml_graph_path: str | N
     else:
         manim_config.quality = quality
 
-    manim_config.frame_rate = int(30 * time_scale)
+    manim_config.frame_rate = int(30 * max(0.1, time_scale))
 
     # Instantiate scene and attach stepper
     scene = scene_cls()
@@ -44,6 +44,8 @@ def render_scene(scene_cls: Type[ActivationGraphScene], yaml_graph_path: str | N
         setattr(scene, "_engine_stepper", stepper)
     if events is not None:
         setattr(scene, "_events", events)
+    # Pass time scale into scene for internal wait/run_time scaling
+    setattr(scene, "_time_scale", float(time_scale))
     scene.render()
 
 
