@@ -15,6 +15,8 @@ learn to recognize complex patterns through coordinated activation dynamics.
 
 # ReCoN Core Package
 
+__version__ = "0.1.0"
+
 from .enums import UnitType, LinkType, State, Message
 from .graph import Graph, Unit, Edge
 from .engine import Engine
