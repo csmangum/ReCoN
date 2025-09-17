@@ -114,7 +114,7 @@ self._update_states(delta)
 
 - **Message Processing**: Handle incoming messages (REQUEST, CONFIRM, etc.)
 - **Soft Activation Update**: Apply propagation deltas with configurable gain: `a = clip(a + config.activation_gain * delta, 0, 1)` (default gain = 0.8)
-- **State Transitions**: Update unit states based on current activation and message history
+- **State Transitions**: Update unit states based on current activation and message history. Terminals can become TRUE when activation exceeds threshold; REQUEST boosts activation but is not strictly required.
 
 #### 3. Message Delivery Phase
 ```python
@@ -682,13 +682,13 @@ print(f"Root state: {snapshot['units']['root']['state']}")
 Use the CLI to compile a YAML script and run for N steps, printing a compact JSON snapshot:
 
 ```bash
-python scripts/recon_cli.py scripts/house.yaml --steps 5 --deterministic --ret-feedback
+PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --steps 5 --deterministic --ret-feedback
 
 # Override gates and thresholds
-python scripts/recon_cli.py scripts/house.yaml --sur 0.25 --por 0.6 --confirm-ratio 0.7
+PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --sur 0.25 --por 0.6 --confirm-ratio 0.7
 
 # Save summary to file
-python scripts/recon_cli.py scripts/house.yaml --steps 10 --out snapshot.json
+PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --steps 10 --out snapshot.json
 ```
 
 Available flags (subset): `--steps`, `--out`, `--sur`, `--por`, `--ret`, `--sub`, `--confirm-ratio`, `--deterministic`, `--ret-feedback`.

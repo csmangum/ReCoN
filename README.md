@@ -36,7 +36,7 @@ pip install -r requirements.txt
 streamlit run viz/app_streamlit.py
 ```
 
-Then in the app, click "Generate Scene" and "Run" to watch active perception in action. Use the "Feature source" selector to switch between Basic, Advanced, Autoencoder, CNN, Comprehensive, and Deep Comprehensive terminal sets. Training buttons allow optional AE/CNN training (see env vars below).
+Then in the app, click "Generate" to create a scene and use "Step" to advance the simulation. The demo shows the scene, fovea path, a network graph with states, and message summaries.
 
 ### CLI
 
@@ -133,6 +133,7 @@ tests/
 1. **Propagation**: Calculate activation flow using gate functions
 2. **State Updates**: Process messages and update unit states
 3. **Message Delivery**: Move messages between unit queues
+4. **Second Message Processing**: Immediately process delivered messages for within-step effects
 
 ### Active Perception
 Unlike passive classifiers, ReCoN **actively requests** only relevant information, making recognition more efficient and selective.

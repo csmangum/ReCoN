@@ -24,13 +24,13 @@ pip install -r requirements.txt
 streamlit run viz/app_streamlit.py
 
 # CLI example: run a YAML script and print a snapshot
-python scripts/recon_cli.py scripts/house.yaml --steps 5 --deterministic --ret-feedback
+PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --steps 5 --deterministic --ret-feedback
 
 # Alternative: dump to a file
-python scripts/recon_cli.py scripts/house.yaml --steps 10 --out snapshot.json
+PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --steps 10 --out snapshot.json
 
 # Run comprehensive graph validation demo
-python scripts/graph_validation_demo.py
+python3 scripts/graph_validation_demo.py
 ```
 
 ## Problem Framing
@@ -124,17 +124,17 @@ The ReCoN engine operates in discrete time steps with a carefully orchestrated f
 
 **Phase 1 - Propagation**: For each link type (SUB, SUR, POR, RET), the engine evaluates "gate functions" that determine how much activation flows from source to destination units. For example, a CONFIRMED unit sends positive deltas (+0.5) through POR links to unlock successors, while a FAILED unit sends negative deltas (-0.5) through RET links to propagate failure backward. These deltas are summed by destination unit, creating a unified activation change signal.
 
-**Phase 2 - State Update**: Messages are processed first (REQUEST boosts activation and may trigger REQUESTED state, CONFIRM provides additional activation boosts, WAIT forces WAITING state, inhibition messages reduce activation and can cause state transitions). Then activation levels are updated softly using the formula: `new_a = clamp(0, 1, old_a + gain * delta)`. Finally, state machines run - terminals become TRUE when requested and activation exceeds thresholds, scripts orchestrate children and manage sequences through POR/RET links.
+**Phase 2 - State Update**: Messages are processed first (REQUEST boosts activation and may trigger REQUESTED state, CONFIRM provides additional activation boosts, WAIT forces WAITING state, inhibition messages reduce activation and can cause state transitions). Then activation levels are updated softly using the formula: `new_a = clamp(0, 1, old_a + gain * delta)`. Finally, state machines run — terminals can become TRUE when activation exceeds thresholds (REQUEST helps but is not strictly required), scripts orchestrate children and manage sequences through POR/RET links.
 
 **Phase 3 - Message Delivery**: All messages queued in unit outboxes during Phase 2 are transferred to recipient inboxes. This asynchronous mechanism prevents infinite loops and enables units to react to multiple simultaneous events.
 
-**Phase 4 - Second Message Processing**: Any messages delivered in Phase 3 are immediately processed, allowing "within-step effects" where one unit's state change can immediately influence others in the same time step. This captures cascading effects like a terminal confirmation triggering a script confirmation that unlocks a successor.
+**Phase 4 - Second Message Processing**: Any messages delivered in Phase 3 are immediately processed, allowing "within-step effects" where one unit's state change can immediately influence others in the same time step. This captures cascading effects like a terminal confirmation triggering a script confirmation that unlocks a successor via POR requests.
 
 ### State semantics
 
 The state semantics define how different unit types respond to activation and coordinate through the network:
 
-**Terminal Units**: These leaf nodes interface with perception. They remain INACTIVE until receiving a REQUEST message, then transition to TRUE when their activation exceeds a threshold (`u.thresh`, default 0.5). Once TRUE, they send CONFIRM messages to parents via SUB links. If activation later drops below a failure threshold (default 0.1), they transition to FAILED and send INHIBIT_CONFIRM messages. This models feature detection that requires both top-down attention (REQUEST) and bottom-up evidence.
+**Terminal Units**: These leaf nodes interface with perception. They transition to TRUE when their activation exceeds a threshold (`u.thresh`, default 0.5) and then send CONFIRM messages to parents via SUB links. Receiving a REQUEST typically boosts activation and accelerates reaching threshold, but a prior REQUEST is not strictly required by the engine. If activation later drops below a failure threshold (default 0.1), they transition to FAILED and send INHIBIT_CONFIRM messages. This models feature detection that benefits from top-down attention (REQUEST) while still allowing bottom-up evidence to confirm.
 
 **Script Units**: These orchestration nodes coordinate child activities. They become REQUESTED when activation exceeds a threshold, then ACTIVE where they send REQUEST messages to children via SUR links. They CONFIRM when a configurable ratio (default 0.6) of children are TRUE/CONFIRMED, implementing AND/OR logic through structural composition rather than explicit operators. Fail-fast behavior means any FAILED child immediately causes the script to FAIL and send INHIBIT_CONFIRM to parents.
 
@@ -146,7 +146,7 @@ The state semantics define how different unit types respond to activation and co
 
 The `EngineConfig` class exposes behavioral knobs without changing core logic:
 
-**Confirmation Ratio** (default 0.6): Controls how many children must be TRUE/CONFIRMED for a script to confirm. Higher values (→1.0) make confirmation more stringent, lower values (→0.0) make it more permissive. This enables exploring different AND/OR semantics - a ratio of 1.0 requires all children, 0.0 requires none.
+**Confirmation Ratio** (default 0.6): Controls how many children must be TRUE/CONFIRMED for a script to confirm. The implementation computes `need = max(1, int(confirmation_ratio * num_children))` when there are children, so at least 1 child is always required if a script has any children. Higher values (→1.0) approach an "all children" requirement; lower values reduce the required count but never below 1 when children exist.
 
 **Deterministic Order** (default True): When enabled, units are processed in sorted ID order rather than dictionary iteration order. This ensures reproducible traces across runs, critical for debugging and pedagogy. When disabled, allows exploring non-deterministic behaviors.
 
@@ -162,7 +162,7 @@ The YAML compiler translates declarative scripts into network topology:
 
 **POR Links**: Encode temporal sequences. A YAML `sequence: [roof, body, door]` creates POR edges (roof→body→door) for forward propagation. RET feedback is supported by the engine and can be added explicitly if desired; it is not auto-generated by the compiler.
 
-**Structural Logic**: AND/OR relationships emerge from structure rather than explicit operators. A script with multiple children and confirmation_ratio=1.0 acts as AND (all required), while confirmation_ratio<1.0 acts as OR (some sufficient). Multiple weighted edges allow fine-grained control - a child with weight 2.0 counts as two confirmations.
+**Structural Logic**: AND/OR relationships emerge from structure rather than explicit operators. A script with multiple children and confirmation_ratio≈1.0 behaves like AND (all required), while lower ratios behave more like OR (some sufficient). Edge weights do not change the child-count criterion for confirmation; confirmation uses counts of children in TRUE/CONFIRMED states.
 
 **Auto-creation**: Missing terminals are created automatically, and the compiler handles both symbolic sequences ("roof then body") and direct child references, making scripts flexible yet structured.
 
@@ -189,7 +189,7 @@ The implementation prioritizes pedagogical value over optimization, with several
 - **Cost**: Additional abstraction layer and YAML schema complexity
 
 **Configurable Parameters vs. Fixed Behavior**
-- **Choice**: Parameterize AND/OR behavior via `confirmation_ratio` and weighted children vs. hardcoded logic
+- **Choice**: Parameterize AND/OR behavior via `confirmation_ratio` vs. hardcoded logic
 - **Trade-off**: Flexibility and experimentation vs. complexity and potential confusion
 - **Benefit**: Flexible modeling; clearer ablations without code changes
 - **Cost**: More configuration options to understand and tune
