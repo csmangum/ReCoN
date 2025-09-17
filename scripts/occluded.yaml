@@ -7,7 +7,7 @@ children:
     type: OR
     parts: [t_horz, t_vert]
 sequence:
-  - scan_house_then_occluder
+  - scan_scene
   - house
   - occluder
 
