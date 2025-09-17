@@ -100,27 +100,20 @@ def init_terminals_from_image(g: Graph, img: np.ndarray) -> Dict[str, float]:
 
 def _simulate_and_capture_messages(g: Graph, steps: int = 8) -> List[dict]:
     """Run the engine for a few steps and capture delivered messages with timestamps."""
-    eng = Engine(g, EngineConfig())
     captured: List[dict] = []
 
-    original_send = eng.send_message
+    class RecordingEngine(Engine):
+        def send_message(self, sender_id: str, receiver_id: str, message):
+            msg_name = getattr(message, 'name', str(message))
+            captured.append({
+                "t": self.t,
+                "sender": sender_id,
+                "receiver": receiver_id,
+                "message": msg_name,
+            })
+            super().send_message(sender_id, receiver_id, message)
 
-    def recording_send(sender_id: str, receiver_id: str, message):
-        # Record each delivered message with time and names
-        try:
-            msg_name = message.name
-        except AttributeError:
-            msg_name = str(message)
-        captured.append({
-            "t": eng.t,
-            "sender": sender_id,
-            "receiver": receiver_id,
-            "message": msg_name,
-        })
-        original_send(sender_id, receiver_id, message)
-
-    # Monkey-patch engine send to record
-    eng.send_message = recording_send  # type: ignore
+    eng = RecordingEngine(g, EngineConfig())
     eng.step(steps)
     return captured
 
