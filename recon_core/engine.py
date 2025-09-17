@@ -343,11 +343,19 @@ class Engine:
                         self.stats["first_request_step"][uid] = self.t
 
                 if u.state == State.REQUESTED:
-                    u.state = State.ACTIVE
-                    if uid not in self.stats["first_active_step"]:
-                        self.stats["first_active_step"][uid] = self.t
-                    # Children should have been requested when we became REQUESTED
-                    # No need to request again
+                    # Check POR predecessors - can only become ACTIVE if all predecessors are CONFIRMED
+                    por_predecessors = self.g.por_predecessors(u.id)
+                    all_predecessors_confirmed = all(
+                        self.g.units[pred_id].state == State.CONFIRMED
+                        for pred_id in por_predecessors
+                    ) if por_predecessors else True
+                    
+                    if all_predecessors_confirmed:
+                        u.state = State.ACTIVE
+                        if uid not in self.stats["first_active_step"]:
+                            self.stats["first_active_step"][uid] = self.t
+                        # Children should have been requested when we became REQUESTED
+                        # No need to request again
 
                 # Ensure SUR requests are sent exactly once when a script is REQUESTED or ACTIVE
                 if (
@@ -369,15 +377,15 @@ class Engine:
                             )
                     self._sur_requested_parents.add(uid)
 
-                # Check POR predecessors - can only become ACTIVE if all predecessors are CONFIRMED
-                por_predecessors = self.g.por_predecessors(u.id)
-                all_predecessors_confirmed = all(
-                    self.g.units[pred_id].state == State.CONFIRMED
-                    for pred_id in por_predecessors
-                ) if por_predecessors else True
-                
                 # Check if enough children are TRUE to confirm (for both REQUESTED->ACTIVE and existing ACTIVE/CONFIRMED)
                 if u.state in (State.ACTIVE, State.CONFIRMED):
+                    # Check POR predecessors - can only confirm if all predecessors are CONFIRMED
+                    por_predecessors = self.g.por_predecessors(u.id)
+                    all_predecessors_confirmed = all(
+                        self.g.units[pred_id].state == State.CONFIRMED
+                        for pred_id in por_predecessors
+                    ) if por_predecessors else True
+                    
                     child_ids = self.g.sub_children(u.id)
                     trues = sum(
                         1
@@ -466,67 +474,14 @@ class Engine:
         Returns:
             dict: Snapshot of the network state after stepping
         """
-        print("Starting " + str(n) + " simulation step(s) at time t=" + str(self.t))
         for step_num in range(n):
-            print(
-                "Step "
-                + str(step_num + 1)
-                + "/"
-                + str(n)
-                + ": Starting propagation phase"
-            )
             delta = self._propagate()
-            print(
-                "Step "
-                + str(step_num + 1)
-                + "/"
-                + str(n)
-                + ": Propagation complete, starting state update phase"
-            )
             self._update_states(delta)
-            print(
-                "Step "
-                + str(step_num + 1)
-                + "/"
-                + str(n)
-                + ": State update complete, starting message delivery phase"
-            )
             self._deliver_messages()  # deliver messages after state updates
-            print(
-                "Step "
-                + str(step_num + 1)
-                + "/"
-                + str(n)
-                + ": Message delivery complete, starting second message processing phase"
-            )
             # Process newly delivered messages in the same step
-            unit_count = len(self._get_unit_ids())
-            print(
-                "Step "
-                + str(step_num + 1)
-                + "/"
-                + str(n)
-                + ": Processing messages for "
-                + str(unit_count)
-                + " units"
-            )
             for uid in self._get_unit_ids():
                 self._process_messages(uid)
             self.t += 1
-            print(
-                "Step "
-                + str(step_num + 1)
-                + "/"
-                + str(n)
-                + ": Complete. Time advanced to t="
-                + str(self.t)
-            )
-        print(
-            "All "
-            + str(n)
-            + " simulation step(s) completed. Final time: t="
-            + str(self.t)
-        )
         return self.snapshot()
 
     def snapshot(self):

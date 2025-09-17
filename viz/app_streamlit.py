@@ -231,12 +231,6 @@ class ReCoNSimulation:
         self.history.append(snap)
         self.message_history.append(messages_this_step)
 
-        # Debug: Print message count for this step
-        print(f"Step {self.engine.t}: Captured {len(messages_this_step)} messages")
-        if messages_this_step:
-            for sender, receiver, msg in messages_this_step:
-                print(f"  {sender} -> {receiver}: {msg.name}")
-
         # Limit history size
         if len(self.history) > self.max_history:
             self.history.pop(0)
@@ -793,11 +787,6 @@ with col_graph:
         # Show messages from the current step (timeline_idx corresponds to the step)
         msg_index = min(timeline_idx, len(st.session_state.sim.message_history) - 1)
         messages = st.session_state.sim.message_history[msg_index]
-
-        # Debug: Print what we're displaying
-        print(
-            f"Displaying messages for timeline_idx={timeline_idx}, msg_index={msg_index}, messages count={len(messages)}"
-        )
 
         # Message type counts
         msg_counts = {}
