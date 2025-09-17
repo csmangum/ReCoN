@@ -176,7 +176,7 @@ class ReCoNSimulation:
         for term_id, term_val in terminals.items():
             u = self.graph.units[term_id]
             u.a = float(term_val)
-            u.state = State.REQUESTED if term_val > 0.1 else State.INACTIVE
+            u.state = State.INACTIVE  # Start all terminals as inactive
 
     def generate_scene(self):
         """Generate a new scene and initialize terminals using Basic feature source."""
@@ -199,9 +199,11 @@ class ReCoNSimulation:
         @contextmanager
         def patch_send_message(engine, on_send):
             original = engine.send_message
+
             def wrapper(sender_id, receiver_id, message):
                 on_send(sender_id, receiver_id, message)
                 return original(sender_id, receiver_id, message)
+
             engine.send_message = wrapper  # type: ignore
             try:
                 yield
@@ -229,6 +231,12 @@ class ReCoNSimulation:
         # Record history
         self.history.append(snap)
         self.message_history.append(messages_this_step)
+
+        # Debug: Print message count for this step
+        print(f"Step {self.engine.t}: Captured {len(messages_this_step)} messages")
+        if messages_this_step:
+            for sender, receiver, msg in messages_this_step:
+                print(f"  {sender} -> {receiver}: {msg.name}")
 
         # Limit history size
         if len(self.history) > self.max_history:
@@ -276,7 +284,7 @@ with st.sidebar:
 
     col_scene_gen, col_scene_reset = st.columns(2)
     with col_scene_gen:
-        if st.button("🎲 Generate Scene", type="primary", use_container_width=True):
+        if st.button("🎲 Generate", type="primary", use_container_width=True):
             img, terminal_vals = st.session_state.sim.generate_scene()
             st.session_state.img = img
             st.session_state.tvals = terminal_vals
@@ -359,9 +367,21 @@ with col_scene:
         if term_name in st.session_state.sim.graph.units:
             term_unit = st.session_state.sim.graph.units[term_name]
             term_value = float(getattr(term_unit, "a", 0.0))
-            color = "green" if term_value > 0.3 else "red"
+            # Use same threshold as network graph state determination (0.1)
+            # and use colors that match the network graph state colors
+            if term_value > 0.1:
+                color = "#6baed6"  # REQUESTED state color (blue)
+            else:
+                color = "#cccccc"  # INACTIVE state color (gray)
             size = 50 + term_value * 100
-            ax_scene.scatter(x, y, c=color, s=size, alpha=0.7, label=f"{term_name} ({term_value:.2f})")
+            ax_scene.scatter(
+                x,
+                y,
+                c=color,
+                s=size,
+                alpha=0.7,
+                label=f"{term_name} ({term_value:.2f})",
+            )
 
     ax_scene.set_xlim(0, 64)
     ax_scene.set_ylim(64, 0)  # Flip y-axis for image coordinates
@@ -459,8 +479,8 @@ with col_graph:
     # Place terminal nodes grouped by their parent script units
     terminal_positions = {
         "t_horz": (-1.0, 1.0),  # near u_roof
-        "t_vert": (1.0, 1.0),   # near u_door
-        "t_mean": (0.0, 1.0),   # near u_body
+        "t_vert": (1.0, 1.0),  # near u_door
+        "t_mean": (0.0, 1.0),  # near u_body
     }
 
     # Position known terminals first
@@ -476,7 +496,9 @@ with col_graph:
     remaining_terminals = [t for t in all_terminals if t not in terminal_positions]
     parent_to_terms = {}
     for term_id in remaining_terminals:
-        parent_id = next((e.dst for e in out_edges.get(term_id, []) if e.type == LinkType.SUB), None)
+        parent_id = next(
+            (e.dst for e in out_edges.get(term_id, []) if e.type == LinkType.SUB), None
+        )
         parent_to_terms.setdefault(parent_id, []).append(term_id)
 
     for parent_id, terms in parent_to_terms.items():
@@ -582,7 +604,8 @@ with col_graph:
     # Animated message arrows on the graph
     # Show messages that led into this state (previous step -> current)
     if st.session_state.sim.message_history:
-        msg_index = max(0, min(len(st.session_state.sim.message_history) - 1, max(0, timeline_idx - 1)))
+        # Show messages from the current step (timeline_idx corresponds to the step)
+        msg_index = min(timeline_idx, len(st.session_state.sim.message_history) - 1)
         messages = st.session_state.sim.message_history[msg_index]
 
         # Define arrow styles for different message types
@@ -701,19 +724,29 @@ with col_graph:
 
     # Message summary panel
     try:
-        t_now = int(current_snap["t"]) if isinstance(current_snap.get("t", 0), (int, float)) else 0
+        t_now = (
+            int(current_snap["t"])
+            if isinstance(current_snap.get("t", 0), (int, float))
+            else 0
+        )
     except Exception:
         t_now = 0
-    step_title = f"Message Summary (Step t={max(0, t_now-1)} → t={t_now})"
+    step_title = f"Message Summary (Step t={t_now})"
     ax_msgs.set_title(step_title)
     ax_msgs.set_xlim(0, 10)
     ax_msgs.set_ylim(0, 10)
     ax_msgs.axis("off")
 
-    # Show message counts and recent activity for the same previous step
+    # Show message counts and recent activity for the current step
     if st.session_state.sim.message_history:
-        msg_index = max(0, min(len(st.session_state.sim.message_history) - 1, max(0, timeline_idx - 1)))
+        # Show messages from the current step (timeline_idx corresponds to the step)
+        msg_index = min(timeline_idx, len(st.session_state.sim.message_history) - 1)
         messages = st.session_state.sim.message_history[msg_index]
+
+        # Debug: Print what we're displaying
+        print(
+            f"Displaying messages for timeline_idx={timeline_idx}, msg_index={msg_index}, messages count={len(messages)}"
+        )
 
         # Message type counts
         msg_counts = {}

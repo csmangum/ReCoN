@@ -7,7 +7,7 @@ This project implements a faithful, practical Request Confirmation Network (ReCo
 ## Demo & Links
 
 - **Root Activation Animation**: [RootActivationScene.mp4](RootActivationScene.mp4) - Visual demonstration of spreading activation dynamics
-- **User Interface (Streamlit)**: see Quickstart below to run locally
+- **Simple User Interface**: See Quickstart below to run locally. It's not fully validated, so some behavior may be incorrect.
 - **Key Features Notebook**: [ReCoN_Key_Features_Demo.ipynb](ReCoN_Key_Features_Demo.ipynb) - Comprehensive demonstration of active perception, hierarchical recognition, temporal sequencing, and metrics
 - **Original paper**: [CoCoNIPS 2015 PDF](CoCoNIPS_2015_paper_6.pdf)
 
