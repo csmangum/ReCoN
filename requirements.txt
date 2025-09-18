@@ -9,4 +9,4 @@ scipy>=1.13.0
 
 # Visualization (optional - requires system dependencies like pangocairo)
 # Comment out if system dependencies are not available
-manim==0.19.0
+# manim==0.19.0  # Removed for Streamlit deployment compatibility
