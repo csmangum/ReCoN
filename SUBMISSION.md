@@ -6,8 +6,10 @@ This project implements a faithful, practical Request Confirmation Network (ReCo
 
 ## Demo & Links
 
+- **Github Repo**: https://github.com/csmangum/ReCoN  
+- **Detailed Documentation**: https://github.com/csmangum/ReCoN/blob/main/RECON_DOCUMENTATION.md
 - **Root Activation Animation**: [RootActivationScene.mp4](RootActivationScene.mp4) - Visual demonstration of spreading activation dynamics
-- **Simple User Interface**: See Quickstart below to run locally. It's not fully validated, so some behavior may be incorrect.
+- **Simple User Interface**: See Quickstart below to run locally or go [here](https://ktrk6tezeey9ssg6kuyplb.streamlit.app/). It's not fully validated, so some behavior may be incorrect.
 - **Key Features Notebook**: [ReCoN_Key_Features_Demo.ipynb](ReCoN_Key_Features_Demo.ipynb) - Comprehensive demonstration of active perception, hierarchical recognition, temporal sequencing, and metrics
 - **Original paper**: [CoCoNIPS 2015 PDF](CoCoNIPS_2015_paper_6.pdf)
 
@@ -24,10 +26,10 @@ pip install -r requirements.txt
 streamlit run viz/app_streamlit.py
 
 # CLI example: run a YAML script and print a snapshot
-PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --steps 5 --deterministic --ret-feedback
+python3 scripts/recon_cli.py scripts/house.yaml --steps 5 --deterministic --ret-feedback
 
 # Alternative: dump to a file
-PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --steps 10 --out snapshot.json
+python3 scripts/recon_cli.py scripts/house.yaml --steps 10 --out snapshot.json
 
 # Run comprehensive graph validation demo
 python3 scripts/graph_validation_demo.py
