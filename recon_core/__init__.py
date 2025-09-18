@@ -30,7 +30,7 @@ except ImportError:  # pragma: no cover - optional import safety
 	compile_from_file = None
 	compile_from_dict = None
 
-# Day 6: expose metrics utilities
+# expose metrics utilities
 try:
 	from .metrics import (
 		binary_precision_recall,

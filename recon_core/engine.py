@@ -52,7 +52,7 @@ class Engine:
         self.config = config or EngineConfig()
         # Track which scripts have already sent their initial SUR requests
         self._sur_requested_parents = set()
-        # Metrics/statistics for Day 6 analytics
+        # Metrics/statistics for analytics
         self.stats = {
             "terminal_request_count": 0,
             "terminal_request_counts_by_id": {},  # unit_id -> count

@@ -1,5 +1,5 @@
 """
-Unit tests for Day 6 metrics utilities and engine instrumentation.
+Unit tests for metrics utilities and engine instrumentation.
 """
 
 import pytest
