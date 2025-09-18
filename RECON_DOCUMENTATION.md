@@ -557,34 +557,34 @@ The repository provides a flexible command-line interface in `scripts/recon_cli.
 ### Quickstart
 
 ```bash
-PYTHONPATH=. python3 scripts/recon_cli.py --version
-PYTHONPATH=. python3 scripts/recon_cli.py -h
-PYTHONPATH=. python3 scripts/recon_cli.py --list-scenes
+python3 scripts/recon_cli.py --version
+python3 scripts/recon_cli.py -h
+python3 scripts/recon_cli.py --list-scenes
 ```
 
 ### Common Commands
 
 ```bash
 # Compile only (no simulation)
-PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --dry-run
+python3 scripts/recon_cli.py scripts/house.yaml --dry-run
 
 # Run for N steps and print snapshot summary
-PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --steps 5 --deterministic --ret-feedback
+python3 scripts/recon_cli.py scripts/house.yaml --steps 5 --deterministic --ret-feedback
 
 # Override key engine parameters
-PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --sur 0.25 --por 0.6 --confirm-ratio 0.7
+python3 scripts/recon_cli.py scripts/house.yaml --sur 0.25 --por 0.6 --confirm-ratio 0.7
 
 # Write snapshot summary to a JSON file
-PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --steps 10 --out snapshot.json
+python3 scripts/recon_cli.py scripts/house.yaml --steps 10 --out snapshot.json
 
 # Validate graph (non-zero exit on errors). Use --strict-activation to enforce bounds.
-PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --validate --strict-activation
+python3 scripts/recon_cli.py scripts/house.yaml --validate --strict-activation
 
 # Print statistics and health score
-PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --stats
+python3 scripts/recon_cli.py scripts/house.yaml --stats
 
 # Export GraphML for external tools
-PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --export-graphml house.graphml --dry-run
+python3 scripts/recon_cli.py scripts/house.yaml --export-graphml house.graphml --dry-run
 ```
 
 ### Flags
@@ -682,13 +682,13 @@ print(f"Root state: {snapshot['units']['root']['state']}")
 Use the CLI to compile a YAML script and run for N steps, printing a compact JSON snapshot:
 
 ```bash
-PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --steps 5 --deterministic --ret-feedback
+python3 scripts/recon_cli.py scripts/house.yaml --steps 5 --deterministic --ret-feedback
 
 # Override gates and thresholds
-PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --sur 0.25 --por 0.6 --confirm-ratio 0.7
+python3 scripts/recon_cli.py scripts/house.yaml --sur 0.25 --por 0.6 --confirm-ratio 0.7
 
 # Save summary to file
-PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --steps 10 --out snapshot.json
+python3 scripts/recon_cli.py scripts/house.yaml --steps 10 --out snapshot.json
 ```
 
 Available flags (subset): `--steps`, `--out`, `--sur`, `--por`, `--ret`, `--sub`, `--confirm-ratio`, `--deterministic`, `--ret-feedback`.
