@@ -42,32 +42,32 @@ Then in the app, click "Generate" to create a scene and use "Step" to advance th
 
 ```bash
 # Show version and help
-PYTHONPATH=. python3 scripts/recon_cli.py --version
-PYTHONPATH=. python3 scripts/recon_cli.py -h
+python3 scripts/recon_cli.py --version
+python3 scripts/recon_cli.py -h
 
 # Discover bundled sample scenes
-PYTHONPATH=. python3 scripts/recon_cli.py --list-scenes
+python3 scripts/recon_cli.py --list-scenes
 
 # Compile only (no stepping)
-PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --dry-run
+python3 scripts/recon_cli.py scripts/house.yaml --dry-run
 
 # Run a YAML script for N steps and print JSON snapshot summary
-PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --steps 5 --deterministic --ret-feedback
+python3 scripts/recon_cli.py scripts/house.yaml --steps 5 --deterministic --ret-feedback
 
 # Override gate strengths and confirmation ratio
-PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --sur 0.25 --por 0.6 --confirm-ratio 0.7
+python3 scripts/recon_cli.py scripts/house.yaml --sur 0.25 --por 0.6 --confirm-ratio 0.7
 
 # Dump to a file
-PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --steps 10 --out snapshot.json
+python3 scripts/recon_cli.py scripts/house.yaml --steps 10 --out snapshot.json
 
 # Validate compiled graph (non-zero exit on errors). Add --strict-activation to treat bounds as errors
-PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --validate --strict-activation
+python3 scripts/recon_cli.py scripts/house.yaml --validate --strict-activation
 
 # Print comprehensive statistics and health score
-PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --stats
+python3 scripts/recon_cli.py scripts/house.yaml --stats
 
 # Export GraphML for external tools (Gephi, yEd, NetworkX)
-PYTHONPATH=. python3 scripts/recon_cli.py scripts/house.yaml --export-graphml house.graphml --dry-run
+python3 scripts/recon_cli.py scripts/house.yaml --export-graphml house.graphml --dry-run
 
 # Run comprehensive graph validation demo
 python3 scripts/graph_validation_demo.py
