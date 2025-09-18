@@ -1,5 +1,5 @@
 """
-Metrics utilities for Request Confirmation Networks (Day 6).
+Metrics utilities for Request Confirmation Networks.
 
 This module provides:
 - Binary precision/recall computation helpers

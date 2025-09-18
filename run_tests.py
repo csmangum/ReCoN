@@ -335,7 +335,7 @@ def main():
         return 1
 
 if __name__ == "__main__":
-    # Inject Day 6 metrics tests into the runner without pytest
+    # Inject metrics tests into the runner without pytest
 
     def test_metrics_binary():
         m = binary_precision_recall([1, 0, 1, 0, 1], [1, 1, 0, 0, 1])
@@ -377,7 +377,7 @@ if __name__ == "__main__":
                 ([test_state_machine], "State Machine Tests"),
                 ([test_integration_scenario], "Integration Tests"),
                 ([test_script_compiler], "Compiler Tests"),
-                ([test_metrics_binary, test_metrics_engine_counters], "Day 6 Metrics Tests"),
+                ([test_metrics_binary, test_metrics_engine_counters], "Metrics Tests"),
             ]
 
             total_passed = 0

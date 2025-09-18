@@ -104,7 +104,7 @@ recon_core/
   engine.py       # propagation + state update rules
   compiler.py     # YAML→graph compiler
   learn.py        # (optional) tiny learning helpers for sur weights
-  metrics.py      # (Day 6) metrics helpers and engine.stats accessors
+  metrics.py      # metrics helpers and engine.stats accessors
 perception/
   dataset.py      # synthetic 2D scenes with variety (houses, barns, occlusion)
   terminals.py    # comprehensive terminals (filters + SIFT-like + autoencoder + engineered [+ optional TinyCNN])
