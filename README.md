@@ -1,3 +1,52 @@
+# ReCoN Visualizer (FastAPI + Svelte + Cytoscape)
+
+Dev setup provides:
+- FastAPI backend with `/recon` HTTP and WebSocket endpoints
+- Svelte + TypeScript + Cytoscape frontend
+
+## Backend (FastAPI)
+
+Location: `app/backend`
+
+Install deps (system Python):
+
+```bash
+pip3 install -r app/backend/requirements.txt
+```
+
+Run the API:
+
+```bash
+uvicorn app.backend.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+API surface:
+- `GET  /recon/graph`
+- `POST /recon/control` `{ "cmd": "step"|"run"|"pause"|"reset" }`
+- `GET  /recon/state`
+- `WS   /recon/stream`
+
+## Frontend (Svelte + Vite)
+
+Location: `app/recon-viz-svelte`
+
+Install and run:
+
+```bash
+cd app/recon-viz-svelte
+npm install
+npm run dev
+```
+
+Environment (optional) in `app/recon-viz-svelte/.env.local`:
+
+```
+VITE_WS_URL=ws://localhost:8000/recon/stream
+VITE_HTTP_BASE=http://localhost:8000
+```
+
+Open `http://localhost:5173` while backend runs on `:8000`.
+
 # Request Confirmation Network (ReCoN) Implementation
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/csmangum/ReCoN/blob/main/ReCoN_Key_Features_Demo.ipynb)
