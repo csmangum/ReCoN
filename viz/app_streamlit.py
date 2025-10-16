@@ -742,8 +742,8 @@ with col_graph:
                             linewidth=style["width"],
                             linestyle=style["style"],
                             alpha=style["alpha"],
-                            shrinkA=25,  # Shrink from start point
-                            shrinkB=25,  # Shrink from end point
+                            shrinkA=0.2,  # Shrink from start point (~node radius in data coords)
+                            shrinkB=0.2,  # Shrink from end point (~node radius in data coords)
                         ),
                         zorder=10,
                     )  # Draw on top
