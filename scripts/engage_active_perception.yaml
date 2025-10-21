@@ -1,0 +1,364 @@
+# Active Perception Phrase Recognition Network
+# Root: Recognizes full phrase "engage active perception"
+# Hierarchy: Phrase → Words → Phonemes (with terminals for audio features)
+# Links: SUB for evidence, SUR for requests, POR for sequencing, RET for feedback
+
+units:
+  # Root script: Confirms entire phrase (threshold 0.8)
+  u_phrase:
+    type: SCRIPT
+    thresh: 0.8
+
+  # Word-level scripts
+  u_engage:  # "engage" (/ɛnˈgeɪdʒ/)
+    type: SCRIPT
+    thresh: 0.7
+  u_active:  # "active" (/ˈæktɪv/)
+    type: SCRIPT
+    thresh: 0.65
+  u_perception:  # "perception" (/pərˈsɛpʃən/)
+    type: SCRIPT
+    thresh: 0.75  # More complex word
+
+  # Phoneme-level scripts (simplified; expand as needed)
+  # For "engage": /ɛn/, /geɪ/, /dʒ/
+  u_en_phoneme:
+    type: SCRIPT
+    thresh: 0.5
+  u_gei_phoneme:
+    type: SCRIPT
+    thresh: 0.5
+  u_dj_phoneme:
+    type: SCRIPT
+    thresh: 0.5
+
+  # For "active": /æk/, /tɪ/, /v/
+  u_ak_phoneme:
+    type: SCRIPT
+    thresh: 0.5
+  u_ti_phoneme:
+    type: SCRIPT
+    thresh: 0.5
+  u_v_phoneme:
+    type: SCRIPT
+    thresh: 0.5
+
+  # For "perception": /pər/, /sɛp/, /ʃən/ (simplified)
+  u_per_phoneme:
+    type: SCRIPT
+    thresh: 0.5
+  u_sep_phoneme:
+    type: SCRIPT
+    thresh: 0.5
+  u_shun_phoneme:
+    type: SCRIPT
+    thresh: 0.5
+
+  # Terminal units (audio features, e.g., via librosa)
+  t_mfcc_low:
+    type: TERMINAL
+    thresh: 0.4
+    meta: {freq_range: "0-500Hz"}
+  t_pitch_high:
+    type: TERMINAL
+    thresh: 0.5
+    meta: {freq_range: "2000-5000Hz"}
+  t_rhythm:
+    type: TERMINAL
+    thresh: 0.3
+  t_noise_level:
+    type: TERMINAL
+    thresh: 0.6  # Inhibitory
+  t_formant:
+    type: TERMINAL
+    thresh: 0.4
+    meta: {for_vowels: true}
+  t_spectrogram:
+    type: TERMINAL
+    thresh: 0.5
+    meta: {full_spectrum: true}
+
+links:
+  # Hierarchical SUB/SUR (evidence/requests) - phrase to words
+  - source: u_engage
+    target: u_phrase
+    type: SUB
+    weight: 1.0
+  - source: u_phrase
+    target: u_engage
+    type: SUR
+    weight: 0.8
+  - source: u_active
+    target: u_phrase
+    type: SUB
+    weight: 1.0
+  - source: u_phrase
+    target: u_active
+    type: SUR
+    weight: 0.8
+  - source: u_perception
+    target: u_phrase
+    type: SUB
+    weight: 1.0
+  - source: u_phrase
+    target: u_perception
+    type: SUR
+    weight: 0.8
+
+  # Phoneme-to-word connections for "engage"
+  - source: u_en_phoneme
+    target: u_engage
+    type: SUB
+    weight: 0.9
+  - source: u_engage
+    target: u_en_phoneme
+    type: SUR
+    weight: 1.0
+  - source: u_gei_phoneme
+    target: u_engage
+    type: SUB
+    weight: 0.9
+  - source: u_engage
+    target: u_gei_phoneme
+    type: SUR
+    weight: 1.0
+  - source: u_dj_phoneme
+    target: u_engage
+    type: SUB
+    weight: 0.9
+  - source: u_engage
+    target: u_dj_phoneme
+    type: SUR
+    weight: 1.0
+
+  # Phoneme-to-word connections for "active"
+  - source: u_ak_phoneme
+    target: u_active
+    type: SUB
+    weight: 0.9
+  - source: u_active
+    target: u_ak_phoneme
+    type: SUR
+    weight: 1.0
+  - source: u_ti_phoneme
+    target: u_active
+    type: SUB
+    weight: 0.9
+  - source: u_active
+    target: u_ti_phoneme
+    type: SUR
+    weight: 1.0
+  - source: u_v_phoneme
+    target: u_active
+    type: SUB
+    weight: 0.9
+  - source: u_active
+    target: u_v_phoneme
+    type: SUR
+    weight: 1.0
+
+  # Phoneme-to-word connections for "perception"
+  - source: u_per_phoneme
+    target: u_perception
+    type: SUB
+    weight: 0.9
+  - source: u_perception
+    target: u_per_phoneme
+    type: SUR
+    weight: 1.0
+  - source: u_sep_phoneme
+    target: u_perception
+    type: SUB
+    weight: 0.9
+  - source: u_perception
+    target: u_sep_phoneme
+    type: SUR
+    weight: 1.0
+  - source: u_shun_phoneme
+    target: u_perception
+    type: SUB
+    weight: 0.9
+  - source: u_perception
+    target: u_shun_phoneme
+    type: SUR
+    weight: 1.0
+
+  # Terminal-to-phoneme (map features to relevant phonemes, e.g., vowels to MFCC)
+  - source: t_mfcc_low
+    target: u_en_phoneme
+    type: SUB
+    weight: 1.0
+  - source: u_en_phoneme
+    target: t_mfcc_low
+    type: SUR
+    weight: 0.7
+  - source: t_mfcc_low
+    target: u_gei_phoneme
+    type: SUB
+    weight: 1.0
+  - source: u_gei_phoneme
+    target: t_mfcc_low
+    type: SUR
+    weight: 0.7
+  - source: t_mfcc_low
+    target: u_ak_phoneme
+    type: SUB
+    weight: 1.0
+  - source: u_ak_phoneme
+    target: t_mfcc_low
+    type: SUR
+    weight: 0.7
+  - source: t_mfcc_low
+    target: u_ti_phoneme
+    type: SUB
+    weight: 1.0
+  - source: u_ti_phoneme
+    target: t_mfcc_low
+    type: SUR
+    weight: 0.7
+  - source: t_mfcc_low
+    target: u_per_phoneme
+    type: SUB
+    weight: 1.0
+  - source: u_per_phoneme
+    target: t_mfcc_low
+    type: SUR
+    weight: 0.7
+  - source: t_mfcc_low
+    target: u_sep_phoneme
+    type: SUB
+    weight: 1.0
+  - source: u_sep_phoneme
+    target: t_mfcc_low
+    type: SUR
+    weight: 0.7
+  - source: t_mfcc_low
+    target: u_shun_phoneme
+    type: SUB
+    weight: 1.0
+  - source: u_shun_phoneme
+    target: t_mfcc_low
+    type: SUR
+    weight: 0.7
+
+  - source: t_pitch_high
+    target: u_dj_phoneme
+    type: SUB
+    weight: 0.8
+  - source: u_dj_phoneme
+    target: t_pitch_high
+    type: SUR
+    weight: 0.7
+  - source: t_pitch_high
+    target: u_v_phoneme
+    type: SUB
+    weight: 0.8
+  - source: u_v_phoneme
+    target: t_pitch_high
+    type: SUR
+    weight: 0.7
+
+  - source: t_formant
+    target: u_en_phoneme
+    type: SUB
+    weight: 0.9
+  - source: u_en_phoneme
+    target: t_formant
+    type: SUR
+    weight: 0.7
+  - source: t_formant
+    target: u_gei_phoneme
+    type: SUB
+    weight: 0.9
+  - source: u_gei_phoneme
+    target: t_formant
+    type: SUR
+    weight: 0.7
+  - source: t_formant
+    target: u_ak_phoneme
+    type: SUB
+    weight: 0.9
+  - source: u_ak_phoneme
+    target: t_formant
+    type: SUR
+    weight: 0.7
+  - source: t_formant
+    target: u_ti_phoneme
+    type: SUB
+    weight: 0.9
+  - source: u_ti_phoneme
+    target: t_formant
+    type: SUR
+    weight: 0.7
+  - source: t_formant
+    target: u_per_phoneme
+    type: SUB
+    weight: 0.9
+  - source: u_per_phoneme
+    target: t_formant
+    type: SUR
+    weight: 0.7
+  - source: t_formant
+    target: u_sep_phoneme
+    type: SUB
+    weight: 0.9
+  - source: u_sep_phoneme
+    target: t_formant
+    type: SUR
+    weight: 0.7
+  - source: t_formant
+    target: u_shun_phoneme
+    type: SUB
+    weight: 0.9
+  - source: u_shun_phoneme
+    target: t_formant
+    type: SUR
+    weight: 0.7
+
+  - source: t_spectrogram
+    target: u_phrase
+    type: SUB
+    weight: 0.6
+  - source: u_phrase
+    target: t_spectrogram
+    type: SUR
+    weight: 0.5
+
+  - source: t_rhythm
+    target: u_phrase
+    type: SUB
+    weight: 0.7
+  - source: u_phrase
+    target: t_rhythm
+    type: SUR
+    weight: 0.6
+
+  # Inhibitory noise
+  - source: t_noise_level
+    target: u_phrase
+    type: SUB
+    weight: -0.5
+
+  # Temporal sequencing (POR/RET)
+  - source: u_engage
+    target: u_active
+    type: POR
+    weight: 1.0
+  - source: u_active
+    target: u_engage
+    type: RET
+    weight: 0.5
+  - source: u_active
+    target: u_perception
+    type: POR
+    weight: 1.0
+  - source: u_perception
+    target: u_active
+    type: RET
+    weight: 0.5
+
+# Config overrides
+config:
+  confirmation_ratio: 0.75
+  sur_positive: 0.4
+  ret_feedback_enabled: true

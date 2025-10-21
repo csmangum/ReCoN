@@ -1,0 +1,494 @@
+# Complex Audio Phrase Recognition Network
+# Root: Recognizes full phrase "play my favorite song"
+# Hierarchy: Phrase → Words → Phonemes (with terminals for audio features)
+# Links: SUB for evidence bottom-up, SUR for requests top-down, POR for sequencing words, RET for feedback on failures
+
+units:
+  # Root script: Confirms entire phrase once enough words are confirmed (threshold 0.8 for high confidence)
+  u_phrase:
+    type: SCRIPT
+    thresh: 0.8  # Needs 80% child confirmation to succeed
+
+  # Word-level scripts (sequenced via POR)
+  u_play:  # Word "play" (/pleɪ/)
+    type: SCRIPT
+    thresh: 0.7
+  u_my:    # Word "my" (/maɪ/)
+    type: SCRIPT
+    thresh: 0.6
+  u_favorite:  # Word "favorite" (/ˈfeɪvərɪt/)
+    type: SCRIPT
+    thresh: 0.75  # More complex word, higher threshold
+  u_song:  # Word "song" (/sɔŋ/)
+    type: SCRIPT
+    thresh: 0.65
+
+  # Phoneme-level scripts (sub-parts of words, for finer-grained recognition)
+  # For "play": /p/, /l/, /eɪ/
+  u_p_phoneme:
+    type: SCRIPT
+    thresh: 0.5
+  u_l_phoneme:
+    type: SCRIPT
+    thresh: 0.5
+  u_ei_phoneme:
+    type: SCRIPT
+    thresh: 0.5
+
+  # For "my": /m/, /aɪ/
+  u_m_phoneme:
+    type: SCRIPT
+    thresh: 0.5
+  u_ai_phoneme:
+    type: SCRIPT
+    thresh: 0.5
+
+  # For "favorite": /f/, /eɪ/, /v/, /ə/, /r/, /ɪ/, /t/ (simplified)
+  u_f_phoneme:
+    type: SCRIPT
+    thresh: 0.5
+  u_ei2_phoneme:
+    type: SCRIPT
+    thresh: 0.5
+  u_v_phoneme:
+    type: SCRIPT
+    thresh: 0.5
+  u_schwa_phoneme:
+    type: SCRIPT
+    thresh: 0.5
+  u_r_phoneme:
+    type: SCRIPT
+    thresh: 0.5
+  u_i_phoneme:
+    type: SCRIPT
+    thresh: 0.5
+  u_t_phoneme:
+    type: SCRIPT
+    thresh: 0.5
+
+  # For "song": /s/, /ɔ/, /ŋ/
+  u_s_phoneme:
+    type: SCRIPT
+    thresh: 0.5
+  u_o_phoneme:
+    type: SCRIPT
+    thresh: 0.5
+  u_ng_phoneme:
+    type: SCRIPT
+    thresh: 0.5
+
+  # Terminal units: Compute audio features on-demand (e.g., via librosa for MFCC, pitch, etc.)
+  # These would be implemented in a custom perception/terminals.py for audio.
+  t_mfcc_low:    # Mel-frequency cepstral coefficients for low frequencies (e.g., vowels)
+    type: TERMINAL
+    thresh: 0.4
+    meta: {freq_range: "0-500Hz", time_window: "0-0.5s"}  # Requests specific signal slice
+  t_pitch_high:  # Pitch detector for high frequencies (e.g., consonants like /s/)
+    type: TERMINAL
+    thresh: 0.5
+    meta: {freq_range: "2000-5000Hz"}
+  t_rhythm:      # Rhythm/tempo analyzer (e.g., onset detection for word boundaries)
+    type: TERMINAL
+    thresh: 0.3
+  t_noise_level: # Noise detector (inhibitory: high noise suppresses confirmation)
+    type: TERMINAL
+    thresh: 0.6  # If noise > thresh, sends negative evidence
+  t_formant:     # Formant analyzer for vowels
+    type: TERMINAL
+    thresh: 0.4
+    meta: {for_vowels: true}
+  t_spectrogram: # Full spectrogram analyzer
+    type: TERMINAL
+    thresh: 0.5
+    meta: {full_spectrum: true}
+
+links:
+  # Hierarchical SUB/SUR for evidence/requests between phrase and words
+  - source: u_play
+    target: u_phrase
+    type: SUB
+    weight: 1.0
+  - source: u_phrase
+    target: u_play
+    type: SUR
+    weight: 0.8
+  - source: u_my
+    target: u_phrase
+    type: SUB
+    weight: 1.0
+  - source: u_phrase
+    target: u_my
+    type: SUR
+    weight: 0.8
+  - source: u_favorite
+    target: u_phrase
+    type: SUB
+    weight: 1.0
+  - source: u_phrase
+    target: u_favorite
+    type: SUR
+    weight: 0.8
+  - source: u_song
+    target: u_phrase
+    type: SUB
+    weight: 1.0
+  - source: u_phrase
+    target: u_song
+    type: SUR
+    weight: 0.8
+
+  # Phoneme-to-word connections for "play"
+  - source: u_p_phoneme
+    target: u_play
+    type: SUB
+    weight: 0.9
+  - source: u_play
+    target: u_p_phoneme
+    type: SUR
+    weight: 1.0
+  - source: u_l_phoneme
+    target: u_play
+    type: SUB
+    weight: 0.9
+  - source: u_play
+    target: u_l_phoneme
+    type: SUR
+    weight: 1.0
+  - source: u_ei_phoneme
+    target: u_play
+    type: SUB
+    weight: 0.9
+  - source: u_play
+    target: u_ei_phoneme
+    type: SUR
+    weight: 1.0
+
+  # Phoneme-to-word connections for "my"
+  - source: u_m_phoneme
+    target: u_my
+    type: SUB
+    weight: 0.9
+  - source: u_my
+    target: u_m_phoneme
+    type: SUR
+    weight: 1.0
+  - source: u_ai_phoneme
+    target: u_my
+    type: SUB
+    weight: 0.9
+  - source: u_my
+    target: u_ai_phoneme
+    type: SUR
+    weight: 1.0
+
+  # Phoneme-to-word connections for "favorite"
+  - source: u_f_phoneme
+    target: u_favorite
+    type: SUB
+    weight: 0.9
+  - source: u_favorite
+    target: u_f_phoneme
+    type: SUR
+    weight: 1.0
+  - source: u_ei2_phoneme
+    target: u_favorite
+    type: SUB
+    weight: 0.9
+  - source: u_favorite
+    target: u_ei2_phoneme
+    type: SUR
+    weight: 1.0
+  - source: u_v_phoneme
+    target: u_favorite
+    type: SUB
+    weight: 0.9
+  - source: u_favorite
+    target: u_v_phoneme
+    type: SUR
+    weight: 1.0
+  - source: u_schwa_phoneme
+    target: u_favorite
+    type: SUB
+    weight: 0.9
+  - source: u_favorite
+    target: u_schwa_phoneme
+    type: SUR
+    weight: 1.0
+  - source: u_r_phoneme
+    target: u_favorite
+    type: SUB
+    weight: 0.9
+  - source: u_favorite
+    target: u_r_phoneme
+    type: SUR
+    weight: 1.0
+  - source: u_i_phoneme
+    target: u_favorite
+    type: SUB
+    weight: 0.9
+  - source: u_favorite
+    target: u_i_phoneme
+    type: SUR
+    weight: 1.0
+  - source: u_t_phoneme
+    target: u_favorite
+    type: SUB
+    weight: 0.9
+  - source: u_favorite
+    target: u_t_phoneme
+    type: SUR
+    weight: 1.0
+
+  # Phoneme-to-word connections for "song"
+  - source: u_s_phoneme
+    target: u_song
+    type: SUB
+    weight: 0.9
+  - source: u_song
+    target: u_s_phoneme
+    type: SUR
+    weight: 1.0
+  - source: u_o_phoneme
+    target: u_song
+    type: SUB
+    weight: 0.9
+  - source: u_song
+    target: u_o_phoneme
+    type: SUR
+    weight: 1.0
+  - source: u_ng_phoneme
+    target: u_song
+    type: SUB
+    weight: 0.9
+  - source: u_song
+    target: u_ng_phoneme
+    type: SUR
+    weight: 1.0
+
+  # Terminal-to-phoneme (example mappings; expand as needed for full coverage)
+  - source: t_mfcc_low
+    target: u_ei_phoneme  # Vowels often in low MFCC
+    type: SUB
+    weight: 1.0
+  - source: u_ei_phoneme
+    target: t_mfcc_low
+    type: SUR
+    weight: 0.7
+  - source: t_mfcc_low
+    target: u_ai_phoneme
+    type: SUB
+    weight: 1.0
+  - source: u_ai_phoneme
+    target: t_mfcc_low
+    type: SUR
+    weight: 0.7
+  - source: t_mfcc_low
+    target: u_ei2_phoneme
+    type: SUB
+    weight: 1.0
+  - source: u_ei2_phoneme
+    target: t_mfcc_low
+    type: SUR
+    weight: 0.7
+  - source: t_mfcc_low
+    target: u_schwa_phoneme
+    type: SUB
+    weight: 1.0
+  - source: u_schwa_phoneme
+    target: t_mfcc_low
+    type: SUR
+    weight: 0.7
+  - source: t_mfcc_low
+    target: u_i_phoneme
+    type: SUB
+    weight: 1.0
+  - source: u_i_phoneme
+    target: t_mfcc_low
+    type: SUR
+    weight: 0.7
+  - source: t_mfcc_low
+    target: u_o_phoneme
+    type: SUB
+    weight: 1.0
+  - source: u_o_phoneme
+    target: t_mfcc_low
+    type: SUR
+    weight: 0.7
+
+  - source: t_pitch_high
+    target: u_p_phoneme   # Consonants like /p/ in high pitch
+    type: SUB
+    weight: 0.8
+  - source: u_p_phoneme
+    target: t_pitch_high
+    type: SUR
+    weight: 0.7
+  - source: t_pitch_high
+    target: u_m_phoneme
+    type: SUB
+    weight: 0.8
+  - source: u_m_phoneme
+    target: t_pitch_high
+    type: SUR
+    weight: 0.7
+  - source: t_pitch_high
+    target: u_f_phoneme
+    type: SUB
+    weight: 0.8
+  - source: u_f_phoneme
+    target: t_pitch_high
+    type: SUR
+    weight: 0.7
+  - source: t_pitch_high
+    target: u_v_phoneme
+    type: SUB
+    weight: 0.8
+  - source: u_v_phoneme
+    target: t_pitch_high
+    type: SUR
+    weight: 0.7
+  - source: t_pitch_high
+    target: u_r_phoneme
+    type: SUB
+    weight: 0.8
+  - source: u_r_phoneme
+    target: t_pitch_high
+    type: SUR
+    weight: 0.7
+  - source: t_pitch_high
+    target: u_t_phoneme
+    type: SUB
+    weight: 0.8
+  - source: u_t_phoneme
+    target: t_pitch_high
+    type: SUR
+    weight: 0.7
+  - source: t_pitch_high
+    target: u_s_phoneme
+    type: SUB
+    weight: 0.8
+  - source: u_s_phoneme
+    target: t_pitch_high
+    type: SUR
+    weight: 0.7
+  - source: t_pitch_high
+    target: u_ng_phoneme
+    type: SUB
+    weight: 0.8
+  - source: u_ng_phoneme
+    target: t_pitch_high
+    type: SUR
+    weight: 0.7
+  - source: t_pitch_high
+    target: u_l_phoneme
+    type: SUB
+    weight: 0.8
+  - source: u_l_phoneme
+    target: t_pitch_high
+    type: SUR
+    weight: 0.7
+
+  - source: t_formant
+    target: u_ei_phoneme
+    type: SUB
+    weight: 0.9
+  - source: u_ei_phoneme
+    target: t_formant
+    type: SUR
+    weight: 0.7
+  - source: t_formant
+    target: u_ai_phoneme
+    type: SUB
+    weight: 0.9
+  - source: u_ai_phoneme
+    target: t_formant
+    type: SUR
+    weight: 0.7
+  - source: t_formant
+    target: u_ei2_phoneme
+    type: SUB
+    weight: 0.9
+  - source: u_ei2_phoneme
+    target: t_formant
+    type: SUR
+    weight: 0.7
+  - source: t_formant
+    target: u_schwa_phoneme
+    type: SUB
+    weight: 0.9
+  - source: u_schwa_phoneme
+    target: t_formant
+    type: SUR
+    weight: 0.7
+  - source: t_formant
+    target: u_i_phoneme
+    type: SUB
+    weight: 0.9
+  - source: u_i_phoneme
+    target: t_formant
+    type: SUR
+    weight: 0.7
+  - source: t_formant
+    target: u_o_phoneme
+    type: SUB
+    weight: 0.9
+  - source: u_o_phoneme
+    target: t_formant
+    type: SUR
+    weight: 0.7
+
+  - source: t_spectrogram
+    target: u_phrase  # Global spectrogram for overall phrase
+    type: SUB
+    weight: 0.6
+  - source: u_phrase
+    target: t_spectrogram
+    type: SUR
+    weight: 0.5
+
+  - source: t_rhythm
+    target: u_phrase  # Rhythm for word boundaries
+    type: SUB
+    weight: 0.7
+  - source: u_phrase
+    target: t_rhythm
+    type: SUR
+    weight: 0.6
+
+  # Inhibitory link for noise
+  - source: t_noise_level
+    target: u_phrase
+    type: SUB
+    weight: -0.5  # Negative weight to suppress if noisy
+
+  # Temporal sequencing (POR/RET for order and feedback)
+  - source: u_play
+    target: u_my
+    type: POR  # "play" must confirm before "my"
+    weight: 1.0
+  - source: u_my
+    target: u_play
+    type: RET  # Feedback: If "my" fails, inhibit "play" and retry
+    weight: 0.5
+  - source: u_my
+    target: u_favorite
+    type: POR
+    weight: 1.0
+  - source: u_favorite
+    target: u_my
+    type: RET
+    weight: 0.5
+  - source: u_favorite
+    target: u_song
+    type: POR
+    weight: 1.0
+  - source: u_song
+    target: u_favorite
+    type: RET
+    weight: 0.5
+
+# Engine config overrides (for this audio scenario)
+config:
+  confirmation_ratio: 0.75  # Require stronger confirmation due to noise
+  sur_positive: 0.4         # Stronger requests for ambiguous audio
+  ret_feedback_enabled: true  # Enable feedback for retries in noisy conditions

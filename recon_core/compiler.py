@@ -62,12 +62,25 @@ def compile_from_dict(spec: Dict[str, Any]) -> Graph:
     """
     Compile a YAML-parsed dictionary into a ReCoN `Graph`.
 
+    Supports two schemas:
+    1. Legacy schema: object/children/sequence (for backward compatibility)
+    2. Advanced schema: units/links/config (for complex networks)
+
     Args:
         spec: Parsed YAML dictionary
 
     Returns:
         Graph: The compiled network graph
     """
+    # Detect schema type
+    if "units" in spec and "links" in spec:
+        return _compile_advanced_schema(spec)
+    else:
+        return _compile_legacy_schema(spec)
+
+
+def _compile_legacy_schema(spec: Dict[str, Any]) -> Graph:
+    """Compile legacy object/children/sequence schema."""
     g = Graph()
 
     # Root script
@@ -126,6 +139,55 @@ def compile_from_dict(spec: Dict[str, Any]) -> Graph:
     for a, b in zip(seq_units, seq_units[1:]):
         g.add_edge(Edge(a, b, LinkType.POR, w=1.0))
 
+    return g
+
+
+def _compile_advanced_schema(spec: Dict[str, Any]) -> Graph:
+    """Compile advanced units/links/config schema."""
+    g = Graph()
+    
+    # Create units from spec
+    units_spec = spec.get("units", {})
+    for unit_id, unit_data in units_spec.items():
+        unit_type_str = unit_data.get("type", "SCRIPT").upper()
+        unit_type = UnitType.SCRIPT if unit_type_str == "SCRIPT" else UnitType.TERMINAL
+        
+        # Create unit with custom threshold and metadata
+        thresh = unit_data.get("thresh", 0.5)
+        meta = unit_data.get("meta", {})
+        
+        u = Unit(unit_id, unit_type, state=State.INACTIVE, a=0.0, thresh=thresh, meta=meta)
+        g.add_unit(u)
+    
+    # Create edges from spec
+    links_spec = spec.get("links", [])
+    for link_data in links_spec:
+        src = link_data.get("source")
+        dst = link_data.get("target")
+        link_type_str = link_data.get("type", "SUB").upper()
+        weight = link_data.get("weight", 1.0)
+        
+        if not src or not dst:
+            continue
+            
+        # Map string to LinkType enum
+        link_type_map = {
+            "SUB": LinkType.SUB,
+            "SUR": LinkType.SUR,
+            "POR": LinkType.POR,
+            "RET": LinkType.RET
+        }
+        link_type = link_type_map.get(link_type_str, LinkType.SUB)
+        
+        # Create edge
+        edge = Edge(src, dst, link_type, w=weight)
+        g.add_edge(edge)
+    
+    # Store config in graph metadata for inspection (not used at compile time)
+    config = spec.get("config", {})
+    if config:
+        g.meta = {"config": config}
+    
     return g
 
 

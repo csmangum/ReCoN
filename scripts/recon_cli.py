@@ -44,6 +44,10 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     p.add_argument("--steps", type=int, default=5, help="Number of steps to run")
     p.add_argument("--dry-run", action="store_true", help="Compile only; do not step the engine")
     p.add_argument("--out", type=str, default="", help="Optional output JSON file path")
+    
+    # Audio processing
+    p.add_argument("--audio", type=str, default="", help="Path to WAV file for audio feature extraction")
+    p.add_argument("--audio-window", type=float, default=0.0, help="Time window for audio analysis (0.0 = full file)")
 
     # Engine config overrides
     p.add_argument("--sur", type=float, default=None, help="SUR positive gate value")
@@ -171,6 +175,40 @@ def main(argv: List[str] | None = None) -> int:
         # validation_summary/results are guaranteed set in this branch
         print(json.dumps({"summary": validation_summary, "results": validation_results}, indent=2))
         return 1 if validation_summary and validation_summary["errors"] > 0 else 0
+
+    # Initialize audio features if provided
+    if args.audio:
+        try:
+            from perception.audio_terminals import extract_features, validate_audio_file
+            
+            if validate_audio_file(args.audio):
+                logging.info("Loading audio features from %s", args.audio)
+                audio_features = extract_features(args.audio)
+                
+                # Set terminal activations based on audio features
+                for terminal_id, activation in audio_features.items():
+                    if terminal_id in g.units:
+                        g.units[terminal_id].a = float(activation)
+                        logging.debug("Set %s activation to %.3f", terminal_id, activation)
+                    else:
+                        logging.warning("Terminal %s not found in graph", terminal_id)
+            else:
+                logging.warning("Invalid audio file %s, using synthetic features", args.audio)
+                from perception.audio_terminals import create_synthetic_audio_features
+                audio_features = create_synthetic_audio_features()
+                for terminal_id, activation in audio_features.items():
+                    if terminal_id in g.units:
+                        g.units[terminal_id].a = float(activation)
+        except ImportError:
+            logging.warning("Audio processing libraries not available, using synthetic features")
+            from perception.audio_terminals import create_synthetic_audio_features
+            audio_features = create_synthetic_audio_features()
+            for terminal_id, activation in audio_features.items():
+                if terminal_id in g.units:
+                    g.units[terminal_id].a = float(activation)
+        except Exception as e:
+            logging.error("Audio processing failed: %s", e)
+            return 1
 
     if args.dry_run:
         # Exit early if dry-run is specified since no engine execution is required

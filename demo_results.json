@@ -1,0 +1,159 @@
+{
+  "t": 10,
+  "units": {
+    "u_phrase": {
+      "state": "CONFIRMED",
+      "a": 1.0,
+      "kind": "SCRIPT"
+    },
+    "u_engage": {
+      "state": "CONFIRMED",
+      "a": 1.0,
+      "kind": "SCRIPT"
+    },
+    "u_active": {
+      "state": "CONFIRMED",
+      "a": 1.0,
+      "kind": "SCRIPT"
+    },
+    "u_perception": {
+      "state": "CONFIRMED",
+      "a": 1.0,
+      "kind": "SCRIPT"
+    },
+    "u_en_phoneme": {
+      "state": "CONFIRMED",
+      "a": 1.0,
+      "kind": "SCRIPT"
+    },
+    "u_gei_phoneme": {
+      "state": "CONFIRMED",
+      "a": 1.0,
+      "kind": "SCRIPT"
+    },
+    "u_dj_phoneme": {
+      "state": "CONFIRMED",
+      "a": 1.0,
+      "kind": "SCRIPT"
+    },
+    "u_ak_phoneme": {
+      "state": "CONFIRMED",
+      "a": 1.0,
+      "kind": "SCRIPT"
+    },
+    "u_ti_phoneme": {
+      "state": "CONFIRMED",
+      "a": 1.0,
+      "kind": "SCRIPT"
+    },
+    "u_v_phoneme": {
+      "state": "CONFIRMED",
+      "a": 1.0,
+      "kind": "SCRIPT"
+    },
+    "u_per_phoneme": {
+      "state": "CONFIRMED",
+      "a": 1.0,
+      "kind": "SCRIPT"
+    },
+    "u_sep_phoneme": {
+      "state": "CONFIRMED",
+      "a": 1.0,
+      "kind": "SCRIPT"
+    },
+    "u_shun_phoneme": {
+      "state": "CONFIRMED",
+      "a": 1.0,
+      "kind": "SCRIPT"
+    },
+    "t_mfcc_low": {
+      "state": "TRUE",
+      "a": 0.6,
+      "kind": "TERMINAL"
+    },
+    "t_pitch_high": {
+      "state": "TRUE",
+      "a": 1.0,
+      "kind": "TERMINAL"
+    },
+    "t_rhythm": {
+      "state": "TRUE",
+      "a": 0.888,
+      "kind": "TERMINAL"
+    },
+    "t_noise_level": {
+      "state": "INACTIVE",
+      "a": 0.1,
+      "kind": "TERMINAL"
+    },
+    "t_formant": {
+      "state": "TRUE",
+      "a": 0.7,
+      "kind": "TERMINAL"
+    },
+    "t_spectrogram": {
+      "state": "TRUE",
+      "a": 0.84,
+      "kind": "TERMINAL"
+    }
+  },
+  "stats": {
+    "terminal_request_count": 18,
+    "terminal_request_counts_by_id": {
+      "t_mfcc_low": 7,
+      "t_formant": 7,
+      "t_spectrogram": 1,
+      "t_rhythm": 1,
+      "t_pitch_high": 2
+    },
+    "first_request_step": {
+      "u_ti_phoneme": 1,
+      "u_shun_phoneme": 1,
+      "u_sep_phoneme": 1,
+      "u_phrase": 1,
+      "u_per_phoneme": 1,
+      "u_gei_phoneme": 1,
+      "u_en_phoneme": 1,
+      "u_ak_phoneme": 1,
+      "u_v_phoneme": 2,
+      "u_dj_phoneme": 2
+    },
+    "first_active_step": {
+      "u_ti_phoneme": 1,
+      "u_shun_phoneme": 1,
+      "u_sep_phoneme": 1,
+      "u_phrase": 1,
+      "u_per_phoneme": 1,
+      "u_gei_phoneme": 1,
+      "u_en_phoneme": 1,
+      "u_ak_phoneme": 1,
+      "u_v_phoneme": 2,
+      "u_engage": 2,
+      "u_dj_phoneme": 2,
+      "u_active": 2,
+      "u_perception": 3
+    },
+    "first_true_step": {
+      "t_spectrogram": 0,
+      "t_rhythm": 0,
+      "t_mfcc_low": 0,
+      "t_formant": 0,
+      "t_pitch_high": 3
+    },
+    "first_confirm_step": {
+      "u_ti_phoneme": 1,
+      "u_shun_phoneme": 1,
+      "u_sep_phoneme": 1,
+      "u_per_phoneme": 1,
+      "u_gei_phoneme": 1,
+      "u_en_phoneme": 1,
+      "u_ak_phoneme": 1,
+      "u_engage": 2,
+      "u_active": 2,
+      "u_phrase": 3,
+      "u_perception": 3,
+      "u_v_phoneme": 4,
+      "u_dj_phoneme": 4
+    }
+  }
+}
