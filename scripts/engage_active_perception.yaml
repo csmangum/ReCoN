@@ -1,0 +1,15 @@
+object: phrase
+children:
+  - id: engage
+    type: AND
+    parts: [t_engage_audio, t_engage_energy, t_engage_rhythm]
+  - id: active
+    type: AND
+    parts: [t_active_audio, t_active_energy, t_active_rhythm]
+  - id: perception
+    type: AND
+    parts: [t_perception_audio, t_perception_energy, t_perception_rhythm]
+sequence:
+  - engage
+  - active
+  - perception

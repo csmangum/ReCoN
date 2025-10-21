@@ -28,12 +28,29 @@ import networkx as nx
 import numpy as np
 import streamlit as st
 from contextlib import contextmanager
+from collections import deque
+import tempfile
 
 from perception.terminals import sample_scene_and_terminals
 from perception.dataset import make_house_scene
 from recon_core.engine import Engine
 from recon_core.enums import LinkType, State, UnitType
 from recon_core.graph import Edge, Graph, Unit
+from recon_core.compiler import compile_from_file
+from recon_core.config import EngineConfig
+
+# Audio processing imports
+try:
+    from streamlit_webrtc import webrtc_streamer, WebRtcMode, AudioProcessorBase
+    HAS_WEBRTC = True
+except ImportError:
+    HAS_WEBRTC = False
+
+try:
+    from perception.audio_terminals import extract_features_from_array, create_synthetic_audio_features, create_strong_audio_features
+    HAS_AUDIO_TERMINALS = True
+except ImportError:
+    HAS_AUDIO_TERMINALS = False
 
 # Speed control mapping constants
 SPEED_DELAY_MAPPING = {
@@ -283,6 +300,203 @@ class ReCoNSimulation:
         return self.engine.snapshot()
 
 
+class AudioReCoNSimulation:
+    """Manages the ReCoN simulation state for audio processing."""
+
+    def __init__(self):
+        self.graph = self.init_graph()
+        self.engine = Engine(self.graph)
+        self.history = []
+        self.max_history = 100
+
+    def init_graph(self):
+        """Initialize the audio phrase recognition network topology."""
+        try:
+            g = compile_from_file("scripts/engage_active_perception.yaml")
+            return g
+        except Exception as e:
+            st.error(f"Failed to load audio YAML: {e}")
+            # Fallback to basic graph
+            g = Graph()
+            # Add basic units
+            for unit_id in ["u_phrase", "u_engage", "u_active", "u_perception"]:
+                g.add_unit(Unit(unit_id, UnitType.SCRIPT, state=State.INACTIVE, a=0.0))
+            # Add terminals
+            for term_id in ["t_engage_audio", "t_engage_energy", "t_engage_rhythm", 
+                           "t_active_audio", "t_active_energy", "t_active_rhythm",
+                           "t_perception_audio", "t_perception_energy", "t_perception_rhythm"]:
+                g.add_unit(Unit(term_id, UnitType.TERMINAL, state=State.INACTIVE, a=0.0, thresh=0.005))
+            return g
+
+    def reset_simulation(self):
+        """Reset the simulation to initial state."""
+        self.engine.reset()
+        self.history = []
+        return self.engine.snapshot()
+
+    def step_simulation(self, n_steps=1):
+        """Step the simulation forward and record history."""
+        snap = self.engine.step(n_steps)
+        self.history.append(snap)
+        
+        # Limit history size
+        if len(self.history) > self.max_history:
+            self.history.pop(0)
+        
+        return snap
+
+    def set_terminals(self, features):
+        """Set terminal activations from audio features."""
+        for tid, val in features.items():
+            if tid in self.engine.g.units:
+                self.engine.g.units[tid].a = float(val)
+
+
+def render_audio_tab():
+    """Render the Audio (Active Perception) tab."""
+    st.header("🎤 Audio (Active Perception) – \"Engage active perception\"")
+    st.caption("Live mic → audio features → ReCoN terminals → phonemes → words → phrase")
+
+    # Initialize audio simulation if not exists
+    if "audio_sim" not in st.session_state:
+        st.session_state.audio_sim = AudioReCoNSimulation()
+
+    # Controls
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        confirm_ratio = st.slider("Confirmation ratio", 0.5, 0.9, 0.75, 0.01)
+        deterministic = st.checkbox("Deterministic order", value=True)
+        ret_feedback = st.checkbox("RET feedback enabled", value=True)
+    
+    with col2:
+        window_seconds = st.slider("Audio window (sec)", 0.2, 2.0, 0.8, 0.1)
+        activation_gain = st.slider("Activation gain", 0.1, 2.0, 0.8, 0.1)
+    
+    with col3:
+        reset = st.button("🔄 Reset Engine", use_container_width=True)
+        if reset:
+            st.session_state.audio_sim.reset_simulation()
+            st.rerun()
+
+    # Update engine config
+    config = EngineConfig(
+        deterministic_order=deterministic,
+        ret_feedback_enabled=ret_feedback,
+        confirmation_ratio=confirm_ratio,
+        activation_gain=activation_gain,
+    )
+    st.session_state.audio_sim.engine.config = config
+
+    # Status and visualization
+    status = st.empty()
+    unit_table = st.empty()
+    metrics_box = st.empty()
+
+    if not HAS_WEBRTC or not HAS_AUDIO_TERMINALS:
+        st.warning("streamlit-webrtc or audio terminals not available. Showing synthetic demo.")
+        
+        # Synthetic demo mode
+        run_synthetic = st.button("🎲 Run Synthetic Demo", type="primary")
+        if run_synthetic:
+            # Use strong features to trigger confirmation
+            features = create_strong_audio_features()
+            st.session_state.audio_sim.set_terminals(features)
+            st.session_state.audio_sim.step_simulation(5)  # Run several steps
+        
+        # Always show current state
+        _render_audio_snapshot(st.session_state.audio_sim, status, unit_table, metrics_box)
+        return
+
+    # WebRTC audio processing
+    class AudioProcessor(AudioProcessorBase):
+        def __init__(self):
+            self.sr = 16000
+            self.buffer = deque(maxlen=int(self.sr * window_seconds))
+
+        def recv_audio(self, frame):
+            # frame.to_ndarray() returns stereo/mono float32 PCM
+            audio = frame.to_ndarray()
+            if len(audio.shape) > 1:
+                mono = audio.mean(axis=1).astype(np.float32)
+            else:
+                mono = audio.astype(np.float32)
+            
+            # accumulate into ring buffer
+            remaining = self.buffer.maxlen - len(self.buffer)
+            if remaining > 0:
+                take = min(remaining, len(mono))
+                self.buffer.extend(mono[:take])
+            return frame  # passthrough
+
+    # Live processing toggle
+    run_live = st.toggle("🎵 Run Live Engine Loop", value=False)
+    
+    # WebRTC streamer (only create when needed)
+    ctx = None
+    if run_live:
+        ctx = webrtc_streamer(
+            key="recon-audio",
+            mode=WebRtcMode.SENDRECV,
+            audio_processor_factory=AudioProcessor,
+            media_stream_constraints={"audio": True, "video": False},
+        )
+    
+    if ctx and ctx.state.playing and run_live:
+        proc = ctx.audio_processor
+        if proc and len(proc.buffer) > 0:
+            # Convert current buffer to features
+            try:
+                audio_array = np.array(proc.buffer)
+                feats = extract_features_from_array(audio_array, sr=proc.sr)
+            except Exception as e:
+                st.error(f"Audio processing error: {e}")
+                feats = create_synthetic_audio_features()
+
+            st.session_state.audio_sim.set_terminals(feats)
+            st.session_state.audio_sim.step_simulation(1)
+
+    # Render current state
+    _render_audio_snapshot(st.session_state.audio_sim, status, unit_table, metrics_box)
+
+
+def _render_audio_snapshot(sim, status, unit_table, metrics_box):
+    """Render the current audio simulation snapshot."""
+    snap = sim.engine.snapshot()
+    
+    # Phrase status
+    phrase_state = "UNKNOWN"
+    if "u_phrase" in snap["units"]:
+        phrase_state = snap["units"]["u_phrase"]["state"]
+    
+    status.markdown(f"**Phrase state:** `{phrase_state}`  |  **Time:** t={snap['t']}")
+    
+    # Unit table
+    unit_data = []
+    for uid, u in snap["units"].items():
+        unit_data.append({
+            "Unit": uid,
+            "Kind": u["kind"],
+            "State": u["state"],
+            "Activation": round(u["a"], 3),
+            "Inbox": u["inbox_size"],
+            "Outbox": u["outbox_size"],
+        })
+    
+    # Sort by unit type and name
+    unit_data.sort(key=lambda x: (x["Kind"], x["Unit"]))
+    unit_table.dataframe(unit_data, use_container_width=True, height=400)
+    
+    # Metrics
+    m = snap["stats"]
+    metrics_data = {
+        "terminal_request_count": m.get("terminal_request_count", 0),
+        "first_confirm_step": m.get("first_confirm_step", {}),
+        "first_true_step": m.get("first_true_step", {}),
+    }
+    metrics_box.json(metrics_data)
+
+
 def get_speed_label_from_delay(delay):
     """Convert run delay value to human-readable speed label."""
     # Find the speed label that corresponds to the given delay
@@ -368,8 +582,12 @@ with st.sidebar:
         index=unit_options.index("u_root") if "u_root" in unit_options else 0,
     )
 
-# Main display
-col_scene, col_graph = st.columns([1, 1.2])
+# Main display - use tabs for different modes
+tabs = st.tabs(["🏠 House Demo", "🎤 Audio (Active Perception)"])
+
+with tabs[0]:
+    # Original house demo content
+    col_scene, col_graph = st.columns([1, 1.2])
 
 with col_scene:
     st.subheader("🏠 Scene with Fovea Path")
@@ -971,3 +1189,7 @@ with col_status3:
         u["inbox_size"] + u["outbox_size"] for u in current_snap["units"].values()
     )
     st.metric("Pending Messages", total_messages)
+
+with tabs[1]:
+    # Audio (Active Perception) tab
+    render_audio_tab()
