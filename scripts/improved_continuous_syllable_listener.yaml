@@ -1,0 +1,498 @@
+# Improved Continuous Syllable Listener with Noise Rejection and Better Discrimination
+# This version addresses the over-sensitivity issues found in mismatch testing
+
+units:
+  # Main orchestration unit
+  u_continuous_listener:
+    type: SCRIPT
+    thresh: 0.8  # Increased threshold for better selectivity
+    meta: {role: "main_listener", description: "Orchestrates continuous syllable recognition"}
+
+  # Speech detection gate with noise rejection
+  u_speaking_detector:
+    type: SCRIPT
+    thresh: 0.7  # Increased threshold
+    meta: {role: "speech_gate", description: "Detects active speech while rejecting noise"}
+
+  # Syllable sequence management
+  u_syllable_sequence:
+    type: SCRIPT
+    thresh: 0.8  # Increased threshold
+    meta: {role: "sequence_manager", description: "Manages temporal syllable ordering"}
+
+  # Syllable hypotheses with higher thresholds
+  u_syllable_h1:  # /hɛ/ (first syllable)
+    type: SCRIPT
+    thresh: 0.8  # Increased from 0.6
+    meta: {role: "syllable", position: 1, phonemes: ["h", "ɛ"]}
+
+  u_syllable_h2:  # /loʊ/ (second syllable)
+    type: SCRIPT
+    thresh: 0.8  # Increased from 0.6
+    meta: {role: "syllable", position: 2, phonemes: ["l", "oʊ"]}
+
+  # Phoneme-level units with higher thresholds
+  u_phoneme_h:
+    type: SCRIPT
+    thresh: 0.7  # Increased from 0.5
+    meta: {role: "phoneme", syllable: 1, sound: "h", type: "consonant"}
+
+  u_phoneme_e:
+    type: SCRIPT
+    thresh: 0.7  # Increased from 0.5
+    meta: {role: "phoneme", syllable: 1, sound: "ɛ", type: "vowel"}
+
+  u_phoneme_l:
+    type: SCRIPT
+    thresh: 0.7  # Increased from 0.5
+    meta: {role: "phoneme", syllable: 2, sound: "l", type: "consonant"}
+
+  u_phoneme_ow:
+    type: SCRIPT
+    thresh: 0.7  # Increased from 0.5
+    meta: {role: "phoneme", syllable: 2, sound: "oʊ", type: "vowel"}
+
+  # Noise rejection units
+  u_noise_detector:
+    type: SCRIPT
+    thresh: 0.6
+    meta: {role: "noise_gate", description: "Detects and rejects noise patterns"}
+
+  u_speech_quality:
+    type: SCRIPT
+    thresh: 0.6
+    meta: {role: "quality_gate", description: "Ensures speech-like quality"}
+
+  # Audio feature terminals with improved discrimination
+  t_voice_activity:
+    type: TERMINAL
+    thresh: 0.6  # Increased threshold
+    meta: {feature: "vad", description: "Voice activity detection"}
+
+  t_energy_level:
+    type: TERMINAL
+    thresh: 0.5
+    meta: {feature: "energy", description: "Audio energy level"}
+
+  t_spectral_centroid:
+    type: TERMINAL
+    thresh: 0.4
+    meta: {feature: "spectral_centroid", description: "Spectral centroid"}
+
+  # MFCC features grouped for better discrimination
+  t_mfcc_low:      # Low frequency MFCCs (0-3) - good for vowels
+    type: TERMINAL
+    thresh: 0.5
+    meta: {feature: "mfcc_low", description: "Low frequency MFCCs for vowel detection"}
+
+  t_mfcc_mid:      # Mid frequency MFCCs (4-7) - good for consonants
+    type: TERMINAL
+    thresh: 0.5
+    meta: {feature: "mfcc_mid", description: "Mid frequency MFCCs for consonant detection"}
+
+  t_mfcc_high:     # High frequency MFCCs (8-12) - good for fricatives
+    type: TERMINAL
+    thresh: 0.5
+    meta: {feature: "mfcc_high", description: "High frequency MFCCs for fricative detection"}
+
+  t_pitch_tracking:
+    type: TERMINAL
+    thresh: 0.4
+    meta: {feature: "pitch", description: "Fundamental frequency tracking"}
+
+  t_formant_1:
+    type: TERMINAL
+    thresh: 0.5
+    meta: {feature: "formant_1", description: "First formant (F1)"}
+
+  t_formant_2:
+    type: TERMINAL
+    thresh: 0.5
+    meta: {feature: "formant_2", description: "Second formant (F2)"}
+
+  t_spectral_rolloff:
+    type: TERMINAL
+    thresh: 0.4
+    meta: {feature: "spectral_rolloff", description: "Spectral rolloff frequency"}
+
+  t_zero_crossing_rate:
+    type: TERMINAL
+    thresh: 0.3
+    meta: {feature: "zcr", description: "Zero crossing rate"}
+
+  # Noise detection terminals
+  t_noise_level:
+    type: TERMINAL
+    thresh: 0.7
+    meta: {feature: "noise", description: "Noise level detection", inhibitory: true}
+
+  t_spectral_flatness:
+    type: TERMINAL
+    thresh: 0.6
+    meta: {feature: "spectral_flatness", description: "Spectral flatness (noise indicator)", inhibitory: true}
+
+  t_spectral_bandwidth:
+    type: TERMINAL
+    thresh: 0.5
+    meta: {feature: "spectral_bandwidth", description: "Spectral bandwidth"}
+
+  # Speech quality terminals
+  t_harmonicity:
+    type: TERMINAL
+    thresh: 0.4
+    meta: {feature: "harmonicity", description: "Harmonic-to-noise ratio"}
+
+  t_spectral_contrast:
+    type: TERMINAL
+    thresh: 0.5
+    meta: {feature: "spectral_contrast", description: "Spectral contrast"}
+
+links:
+  # Main hierarchical structure
+  - source: u_speaking_detector
+    target: u_continuous_listener
+    type: SUB
+    weight: 0.9
+
+  - source: u_syllable_sequence
+    target: u_continuous_listener
+    type: SUB
+    weight: 0.8
+
+  - source: u_syllable_h1
+    target: u_syllable_sequence
+    type: SUB
+    weight: 0.9
+
+  - source: u_syllable_h2
+    target: u_syllable_sequence
+    type: SUB
+    weight: 0.9
+
+  # Phoneme to syllable connections with improved weights
+  - source: u_phoneme_h
+    target: u_syllable_h1
+    type: SUB
+    weight: 0.95  # Increased weight
+
+  - source: u_phoneme_e
+    target: u_syllable_h1
+    type: SUB
+    weight: 0.95  # Increased weight
+
+  - source: u_phoneme_l
+    target: u_syllable_h2
+    type: SUB
+    weight: 0.95  # Increased weight
+
+  - source: u_phoneme_ow
+    target: u_syllable_h2
+    type: SUB
+    weight: 0.95  # Increased weight
+
+  # Stronger temporal sequencing with higher weights
+  - source: u_syllable_h1
+    target: u_syllable_h2
+    type: POR
+    weight: 2.0  # Increased from 1.0
+
+  - source: u_syllable_h2
+    target: u_syllable_h1
+    type: RET
+    weight: -0.8  # Increased negative weight for stronger inhibition
+
+  # Phoneme-level temporal sequencing
+  - source: u_phoneme_h
+    target: u_phoneme_e
+    type: POR
+    weight: 1.5
+
+  - source: u_phoneme_e
+    target: u_phoneme_l
+    type: POR
+    weight: 1.5
+
+  - source: u_phoneme_l
+    target: u_phoneme_ow
+    type: POR
+    weight: 1.5
+
+  # Cross-syllable inhibition to prevent simultaneous activation
+  - source: u_syllable_h2
+    target: u_syllable_h1
+    type: INHIBIT
+    weight: -0.5
+
+  - source: u_syllable_h1
+    target: u_syllable_h2
+    type: INHIBIT
+    weight: -0.3
+
+  # Noise rejection mechanisms
+  - source: t_noise_level
+    target: u_noise_detector
+    type: SUB
+    weight: 0.9
+
+  - source: t_spectral_flatness
+    target: u_noise_detector
+    type: SUB
+    weight: 0.8
+
+  - source: u_noise_detector
+    target: u_speaking_detector
+    type: INHIBIT
+    weight: -1.0  # Strong inhibition
+
+  - source: u_noise_detector
+    target: u_syllable_h1
+    type: INHIBIT
+    weight: -0.8
+
+  - source: u_noise_detector
+    target: u_syllable_h2
+    type: INHIBIT
+    weight: -0.8
+
+  # Speech quality validation
+  - source: t_harmonicity
+    target: u_speech_quality
+    type: SUB
+    weight: 0.8
+
+  - source: t_spectral_contrast
+    target: u_speech_quality
+    type: SUB
+    weight: 0.7
+
+  - source: u_speech_quality
+    target: u_speaking_detector
+    type: SUB
+    weight: 0.6
+
+  # Improved feature-to-phoneme mapping with better discrimination
+  # Consonant /h/ - fricative characteristics
+  - source: t_mfcc_high
+    target: u_phoneme_h
+    type: SUB
+    weight: 0.9  # High weight for fricative detection
+
+  - source: t_spectral_centroid
+    target: u_phoneme_h
+    type: SUB
+    weight: 0.7
+
+  - source: t_zero_crossing_rate
+    target: u_phoneme_h
+    type: SUB
+    weight: 0.6
+
+  # Vowel /ɛ/ - low front vowel characteristics
+  - source: t_mfcc_low
+    target: u_phoneme_e
+    type: SUB
+    weight: 0.9  # High weight for vowel detection
+
+  - source: t_formant_1
+    target: u_phoneme_e
+    type: SUB
+    weight: 0.8
+
+  - source: t_formant_2
+    target: u_phoneme_e
+    type: SUB
+    weight: 0.8
+
+  - source: t_pitch_tracking
+    target: u_phoneme_e
+    type: SUB
+    weight: 0.6
+
+  # Consonant /l/ - lateral characteristics
+  - source: t_mfcc_mid
+    target: u_phoneme_l
+    type: SUB
+    weight: 0.8  # Different from /h/
+
+  - source: t_spectral_bandwidth
+    target: u_phoneme_l
+    type: SUB
+    weight: 0.7
+
+  - source: t_spectral_rolloff
+    target: u_phoneme_l
+    type: SUB
+    weight: 0.6
+
+  # Vowel /oʊ/ - diphthong characteristics
+  - source: t_mfcc_low
+    target: u_phoneme_ow
+    type: SUB
+    weight: 0.8
+
+  - source: t_formant_1
+    target: u_phoneme_ow
+    type: SUB
+    weight: 0.7
+
+  - source: t_formant_2
+    target: u_phoneme_ow
+    type: SUB
+    weight: 0.7
+
+  - source: t_pitch_tracking
+    target: u_phoneme_ow
+    type: SUB
+    weight: 0.8
+
+  # Speaking detection from basic audio features
+  - source: t_voice_activity
+    target: u_speaking_detector
+    type: SUB
+    weight: 0.8
+
+  - source: t_energy_level
+    target: u_speaking_detector
+    type: SUB
+    weight: 0.6
+
+  - source: t_spectral_centroid
+    target: u_speaking_detector
+    type: SUB
+    weight: 0.5
+
+  # Request propagation (top-down)
+  - source: u_continuous_listener
+    target: u_speaking_detector
+    type: SUR
+    weight: 1.0
+
+  - source: u_speaking_detector
+    target: u_syllable_sequence
+    type: SUR
+    weight: 1.0
+
+  - source: u_syllable_sequence
+    target: u_syllable_h1
+    type: SUR
+    weight: 1.0
+
+  - source: u_syllable_sequence
+    target: u_syllable_h2
+    type: SUR
+    weight: 1.0
+
+  - source: u_syllable_h1
+    target: u_phoneme_h
+    type: SUR
+    weight: 1.0
+
+  - source: u_syllable_h1
+    target: u_phoneme_e
+    type: SUR
+    weight: 1.0
+
+  - source: u_syllable_h2
+    target: u_phoneme_l
+    type: SUR
+    weight: 1.0
+
+  - source: u_syllable_h2
+    target: u_phoneme_ow
+    type: SUR
+    weight: 1.0
+
+  - source: u_phoneme_h
+    target: t_mfcc_high
+    type: SUR
+    weight: 1.0
+
+  - source: u_phoneme_h
+    target: t_spectral_centroid
+    type: SUR
+    weight: 1.0
+
+  - source: u_phoneme_h
+    target: t_zero_crossing_rate
+    type: SUR
+    weight: 1.0
+
+  - source: u_phoneme_e
+    target: t_mfcc_low
+    type: SUR
+    weight: 1.0
+
+  - source: u_phoneme_e
+    target: t_formant_1
+    type: SUR
+    weight: 1.0
+
+  - source: u_phoneme_e
+    target: t_formant_2
+    type: SUR
+    weight: 1.0
+
+  - source: u_phoneme_e
+    target: t_pitch_tracking
+    type: SUR
+    weight: 1.0
+
+  - source: u_phoneme_l
+    target: t_mfcc_mid
+    type: SUR
+    weight: 1.0
+
+  - source: u_phoneme_l
+    target: t_spectral_bandwidth
+    type: SUR
+    weight: 1.0
+
+  - source: u_phoneme_l
+    target: t_spectral_rolloff
+    type: SUR
+    weight: 1.0
+
+  - source: u_phoneme_ow
+    target: t_mfcc_low
+    type: SUR
+    weight: 1.0
+
+  - source: u_phoneme_ow
+    target: t_formant_1
+    type: SUR
+    weight: 1.0
+
+  - source: u_phoneme_ow
+    target: t_formant_2
+    type: SUR
+    weight: 1.0
+
+  - source: u_phoneme_ow
+    target: t_pitch_tracking
+    type: SUR
+    weight: 1.0
+
+  - source: u_noise_detector
+    target: t_noise_level
+    type: SUR
+    weight: 1.0
+
+  - source: u_noise_detector
+    target: t_spectral_flatness
+    type: SUR
+    weight: 1.0
+
+  - source: u_speech_quality
+    target: t_harmonicity
+    type: SUR
+    weight: 1.0
+
+  - source: u_speech_quality
+    target: t_spectral_contrast
+    type: SUR
+    weight: 1.0
+
+engine:
+  max_steps: 50
+  convergence_threshold: 0.01
+  learning_rate: 0.1
