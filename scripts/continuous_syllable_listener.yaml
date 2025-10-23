@@ -1,0 +1,386 @@
+# Continuous Syllable-Level Audio Recognition Network
+# This network implements a continuous listener that:
+# 1. Detects speaking activity (gates)
+# 2. Processes syllable-length sequences
+# 3. Confirms syllable hypotheses in temporal order
+# 4. Validates complete audio stream against main hypothesis
+
+units:
+  # Main continuous listener (root gate)
+  u_continuous_listener:
+    type: SCRIPT
+    thresh: 0.7
+    meta: {role: "main_gate", description: "Controls continuous listening activation"}
+
+  # Speaking detection gate
+  u_speaking_detector:
+    type: SCRIPT
+    thresh: 0.6
+    meta: {role: "speech_gate", description: "Detects when someone is speaking"}
+
+  # Syllable sequence manager
+  u_syllable_sequence:
+    type: SCRIPT
+    thresh: 0.8
+    meta: {role: "sequence_manager", description: "Manages syllable sequence confirmation"}
+
+  # Individual syllable hypotheses (example: "hello" -> /hɛ/, /loʊ/)
+  u_syllable_h1:  # /hɛ/ (first syllable)
+    type: SCRIPT
+    thresh: 0.6
+    meta: {role: "syllable", position: 1, phonemes: ["h", "ɛ"]}
+  u_syllable_h2:  # /loʊ/ (second syllable)
+    type: SCRIPT
+    thresh: 0.6
+    meta: {role: "syllable", position: 2, phonemes: ["l", "oʊ"]}
+
+  # Phoneme-level scripts for each syllable
+  # Syllable 1: /hɛ/
+  u_phoneme_h:
+    type: SCRIPT
+    thresh: 0.5
+    meta: {role: "phoneme", syllable: 1, sound: "h"}
+  u_phoneme_e:
+    type: SCRIPT
+    thresh: 0.5
+    meta: {role: "phoneme", syllable: 1, sound: "ɛ"}
+
+  # Syllable 2: /loʊ/
+  u_phoneme_l:
+    type: SCRIPT
+    thresh: 0.5
+    meta: {role: "phoneme", syllable: 2, sound: "l"}
+  u_phoneme_ow:
+    type: SCRIPT
+    thresh: 0.5
+    meta: {role: "phoneme", syllable: 2, sound: "oʊ"}
+
+  # Audio feature terminals (enhanced for continuous processing)
+  t_voice_activity:      # Voice Activity Detection (VAD)
+    type: TERMINAL
+    thresh: 0.4
+    meta: {feature: "vad", window: "50ms", continuous: true}
+  
+  t_energy_level:        # Audio energy level
+    type: TERMINAL
+    thresh: 0.3
+    meta: {feature: "energy", window: "100ms", continuous: true}
+  
+  t_spectral_centroid:   # Spectral centroid for voice characteristics
+    type: TERMINAL
+    thresh: 0.4
+    meta: {feature: "spectral_centroid", window: "200ms", continuous: true}
+  
+  t_mfcc_0_3:           # Low MFCC coefficients (vowels)
+    type: TERMINAL
+    thresh: 0.4
+    meta: {feature: "mfcc", coefficients: "0-3", window: "100ms", continuous: true}
+  
+  t_mfcc_4_7:           # Mid MFCC coefficients
+    type: TERMINAL
+    thresh: 0.4
+    meta: {feature: "mfcc", coefficients: "4-7", window: "100ms", continuous: true}
+  
+  t_mfcc_8_12:          # High MFCC coefficients (consonants)
+    type: TERMINAL
+    thresh: 0.4
+    meta: {feature: "mfcc", coefficients: "8-12", window: "100ms", continuous: true}
+  
+  t_pitch_tracking:     # Pitch/fundamental frequency
+    type: TERMINAL
+    thresh: 0.4
+    meta: {feature: "pitch", window: "150ms", continuous: true}
+  
+  t_formant_1:          # First formant (F1)
+    type: TERMINAL
+    thresh: 0.4
+    meta: {feature: "formant", number: 1, window: "200ms", continuous: true}
+  
+  t_formant_2:          # Second formant (F2)
+    type: TERMINAL
+    thresh: 0.4
+    meta: {feature: "formant", number: 2, window: "200ms", continuous: true}
+  
+  t_spectral_rolloff:   # Spectral rolloff frequency
+    type: TERMINAL
+    thresh: 0.4
+    meta: {feature: "spectral_rolloff", window: "150ms", continuous: true}
+  
+  t_zero_crossing_rate: # Zero crossing rate
+    type: TERMINAL
+    thresh: 0.4
+    meta: {feature: "zcr", window: "50ms", continuous: true}
+
+links:
+  # Main continuous listener hierarchy
+  - source: u_speaking_detector
+    target: u_continuous_listener
+    type: SUB
+    weight: 1.0
+  - source: u_continuous_listener
+    target: u_speaking_detector
+    type: SUR
+    weight: 0.8
+
+  - source: u_syllable_sequence
+    target: u_continuous_listener
+    type: SUB
+    weight: 1.0
+  - source: u_continuous_listener
+    target: u_syllable_sequence
+    type: SUR
+    weight: 0.8
+
+  # Speaking detection gates
+  - source: t_voice_activity
+    target: u_speaking_detector
+    type: SUB
+    weight: 1.0
+  - source: u_speaking_detector
+    target: t_voice_activity
+    type: SUR
+    weight: 0.7
+
+  - source: t_energy_level
+    target: u_speaking_detector
+    type: SUB
+    weight: 0.8
+  - source: u_speaking_detector
+    target: t_energy_level
+    type: SUR
+    weight: 0.6
+
+  - source: t_spectral_centroid
+    target: u_speaking_detector
+    type: SUB
+    weight: 0.7
+  - source: u_speaking_detector
+    target: t_spectral_centroid
+    type: SUR
+    weight: 0.6
+
+  # Syllable sequence management
+  - source: u_syllable_h1
+    target: u_syllable_sequence
+    type: SUB
+    weight: 1.0
+  - source: u_syllable_sequence
+    target: u_syllable_h1
+    type: SUR
+    weight: 0.8
+
+  - source: u_syllable_h2
+    target: u_syllable_sequence
+    type: SUB
+    weight: 1.0
+  - source: u_syllable_sequence
+    target: u_syllable_h2
+    type: SUR
+    weight: 0.8
+
+  # Temporal sequencing: syllables must be confirmed in order
+  - source: u_syllable_h1
+    target: u_syllable_h2
+    type: POR
+    weight: 1.0
+  - source: u_syllable_h2
+    target: u_syllable_h1
+    type: RET
+    weight: 0.5
+
+  # Phoneme to syllable connections
+  # Syllable 1: /hɛ/
+  - source: u_phoneme_h
+    target: u_syllable_h1
+    type: SUB
+    weight: 0.9
+  - source: u_syllable_h1
+    target: u_phoneme_h
+    type: SUR
+    weight: 1.0
+
+  - source: u_phoneme_e
+    target: u_syllable_h1
+    type: SUB
+    weight: 0.9
+  - source: u_syllable_h1
+    target: u_phoneme_e
+    type: SUR
+    weight: 1.0
+
+  # Syllable 2: /loʊ/
+  - source: u_phoneme_l
+    target: u_syllable_h2
+    type: SUB
+    weight: 0.9
+  - source: u_syllable_h2
+    target: u_phoneme_l
+    type: SUR
+    weight: 1.0
+
+  - source: u_phoneme_ow
+    target: u_syllable_h2
+    type: SUB
+    weight: 0.9
+  - source: u_syllable_h2
+    target: u_phoneme_ow
+    type: SUR
+    weight: 1.0
+
+  # Temporal sequencing: phonemes within syllables
+  - source: u_phoneme_h
+    target: u_phoneme_e
+    type: POR
+    weight: 1.0
+  - source: u_phoneme_e
+    target: u_phoneme_h
+    type: RET
+    weight: 0.3
+
+  - source: u_phoneme_l
+    target: u_phoneme_ow
+    type: POR
+    weight: 1.0
+  - source: u_phoneme_ow
+    target: u_phoneme_l
+    type: RET
+    weight: 0.3
+
+  # Audio features to phonemes (feature mapping)
+  # Consonant features (/h/, /l/)
+  - source: t_mfcc_8_12
+    target: u_phoneme_h
+    type: SUB
+    weight: 0.8
+  - source: u_phoneme_h
+    target: t_mfcc_8_12
+    type: SUR
+    weight: 0.7
+
+  - source: t_mfcc_8_12
+    target: u_phoneme_l
+    type: SUB
+    weight: 0.8
+  - source: u_phoneme_l
+    target: t_mfcc_8_12
+    type: SUR
+    weight: 0.7
+
+  - source: t_pitch_tracking
+    target: u_phoneme_h
+    type: SUB
+    weight: 0.7
+  - source: u_phoneme_h
+    target: t_pitch_tracking
+    type: SUR
+    weight: 0.6
+
+  - source: t_pitch_tracking
+    target: u_phoneme_l
+    type: SUB
+    weight: 0.7
+  - source: u_phoneme_l
+    target: t_pitch_tracking
+    type: SUR
+    weight: 0.6
+
+  # Vowel features (/ɛ/, /oʊ/)
+  - source: t_mfcc_0_3
+    target: u_phoneme_e
+    type: SUB
+    weight: 0.9
+  - source: u_phoneme_e
+    target: t_mfcc_0_3
+    type: SUR
+    weight: 0.8
+
+  - source: t_mfcc_0_3
+    target: u_phoneme_ow
+    type: SUB
+    weight: 0.9
+  - source: u_phoneme_ow
+    target: t_mfcc_0_3
+    type: SUR
+    weight: 0.8
+
+  - source: t_formant_1
+    target: u_phoneme_e
+    type: SUB
+    weight: 0.8
+  - source: u_phoneme_e
+    target: t_formant_1
+    type: SUR
+    weight: 0.7
+
+  - source: t_formant_1
+    target: u_phoneme_ow
+    type: SUB
+    weight: 0.8
+  - source: u_phoneme_ow
+    target: t_formant_1
+    type: SUR
+    weight: 0.7
+
+  - source: t_formant_2
+    target: u_phoneme_e
+    type: SUB
+    weight: 0.8
+  - source: u_phoneme_e
+    target: t_formant_2
+    type: SUR
+    weight: 0.7
+
+  - source: t_formant_2
+    target: u_phoneme_ow
+    type: SUB
+    weight: 0.8
+  - source: u_phoneme_ow
+    target: t_formant_2
+    type: SUR
+    weight: 0.7
+
+  # Additional feature mappings for robustness
+  - source: t_spectral_rolloff
+    target: u_phoneme_h
+    type: SUB
+    weight: 0.6
+  - source: u_phoneme_h
+    target: t_spectral_rolloff
+    type: SUR
+    weight: 0.5
+
+  - source: t_zero_crossing_rate
+    target: u_phoneme_l
+    type: SUB
+    weight: 0.6
+  - source: u_phoneme_l
+    target: t_zero_crossing_rate
+    type: SUR
+    weight: 0.5
+
+  - source: t_mfcc_4_7
+    target: u_phoneme_e
+    type: SUB
+    weight: 0.7
+  - source: u_phoneme_e
+    target: t_mfcc_4_7
+    type: SUR
+    weight: 0.6
+
+  - source: t_mfcc_4_7
+    target: u_phoneme_ow
+    type: SUB
+    weight: 0.7
+  - source: u_phoneme_ow
+    target: t_mfcc_4_7
+    type: SUR
+    weight: 0.6
+
+# Configuration for continuous processing
+config:
+  confirmation_ratio: 0.7        # Require 70% confirmation for robustness
+  sur_positive: 0.5              # Moderate request strength
+  ret_feedback_enabled: true     # Enable feedback for error correction
+  activation_gain: 0.3           # Moderate activation updates
+  script_request_activation_threshold: 0.4  # Lower threshold for continuous activation
+  terminal_failure_threshold: 0.2  # Lower failure threshold for continuous operation
