@@ -40,7 +40,8 @@ def generate_synthetic_syllable(duration=0.3, sr=16000):
     - Vowel with formants
     - Decay envelope
     """
-    t = np.linspace(0, duration, int(sr * duration))
+    n_samples = int(sr * duration)
+    t = np.linspace(0, duration, n_samples)
     
     # Vowel-like formants (e.g., /a/)
     f1 = 700   # First formant
@@ -55,12 +56,17 @@ def generate_synthetic_syllable(duration=0.3, sr=16000):
     )
     
     # Add some noise for realism (consonant burst)
-    noise = np.random.randn(len(t)) * 0.1
+    noise = np.random.randn(n_samples) * 0.1
     
     # Envelope: quick attack, sustain, gradual decay
-    attack = int(0.02 * sr)   # 20ms attack
-    sustain = int(0.15 * sr)  # 150ms sustain
-    decay = int(0.13 * sr)    # 130ms decay
+    # Scale proportionally with duration
+    attack_ratio = 0.02 / 0.3  # 20ms for 300ms default
+    sustain_ratio = 0.15 / 0.3  # 150ms for 300ms default
+    decay_ratio = 0.13 / 0.3    # 130ms for 300ms default
+    
+    attack = int(attack_ratio * n_samples)
+    sustain = int(sustain_ratio * n_samples)
+    decay = n_samples - attack - sustain  # Remaining time
     
     envelope = np.concatenate([
         np.linspace(0, 1, attack),
@@ -69,7 +75,7 @@ def generate_synthetic_syllable(duration=0.3, sr=16000):
     ])
     
     # Combine: noise burst at start, then vowel
-    audio = np.zeros(len(t))
+    audio = np.zeros(n_samples)
     audio[:attack] = noise[:attack]  # Consonant burst
     audio[attack:] = vowel[attack:]  # Vowel
     audio = audio * envelope
