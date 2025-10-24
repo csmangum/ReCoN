@@ -1,0 +1,359 @@
+{
+  "total_syllables": 26,
+  "pipeline_config": {
+    "sample_rate": 16000,
+    "n_mfcc": 13,
+    "n_fft": 400,
+    "hop_length": 160,
+    "n_mels": 26,
+    "fmin": 0.0,
+    "fmax": 8000.0,
+    "window": "hamming",
+    "use_deltas": false,
+    "use_delta_deltas": false,
+    "target_frames": null,
+    "pre_emphasis": 0.97,
+    "frame_duration_ms": 25.0,
+    "hop_duration_ms": 10.0
+  },
+  "syllables": [
+    {
+      "syllable": "bay",
+      "shape": [
+        13,
+        49
+      ],
+      "duration": 0.48,
+      "total_features": 13,
+      "files": {
+        "npz": "bay_mfcc.npz",
+        "json": "bay_mfcc.json"
+      }
+    },
+    {
+      "syllable": "sa",
+      "shape": [
+        13,
+        45
+      ],
+      "duration": 0.448,
+      "total_features": 13,
+      "files": {
+        "npz": "sa_mfcc.npz",
+        "json": "sa_mfcc.json"
+      }
+    },
+    {
+      "syllable": "cat",
+      "shape": [
+        13,
+        36
+      ],
+      "duration": 0.352,
+      "total_features": 13,
+      "files": {
+        "npz": "cat_mfcc.npz",
+        "json": "cat_mfcc.json"
+      }
+    },
+    {
+      "syllable": "pa",
+      "shape": [
+        13,
+        45
+      ],
+      "duration": 0.448,
+      "total_features": 13,
+      "files": {
+        "npz": "pa_mfcc.npz",
+        "json": "pa_mfcc.json"
+      }
+    },
+    {
+      "syllable": "da",
+      "shape": [
+        13,
+        45
+      ],
+      "duration": 0.448,
+      "total_features": 13,
+      "files": {
+        "npz": "da_mfcc.npz",
+        "json": "da_mfcc.json"
+      }
+    },
+    {
+      "syllable": "fa",
+      "shape": [
+        13,
+        45
+      ],
+      "duration": 0.448,
+      "total_features": 13,
+      "files": {
+        "npz": "fa_mfcc.npz",
+        "json": "fa_mfcc.json"
+      }
+    },
+    {
+      "syllable": "sha",
+      "shape": [
+        13,
+        55
+      ],
+      "duration": 0.544,
+      "total_features": 13,
+      "files": {
+        "npz": "sha_mfcc.npz",
+        "json": "sha_mfcc.json"
+      }
+    },
+    {
+      "syllable": "ga",
+      "shape": [
+        13,
+        49
+      ],
+      "duration": 0.48,
+      "total_features": 13,
+      "files": {
+        "npz": "ga_mfcc.npz",
+        "json": "ga_mfcc.json"
+      }
+    },
+    {
+      "syllable": "va",
+      "shape": [
+        13,
+        45
+      ],
+      "duration": 0.448,
+      "total_features": 13,
+      "files": {
+        "npz": "va_mfcc.npz",
+        "json": "va_mfcc.json"
+      }
+    },
+    {
+      "syllable": "bow",
+      "shape": [
+        13,
+        49
+      ],
+      "duration": 0.48,
+      "total_features": 13,
+      "files": {
+        "npz": "bow_mfcc.npz",
+        "json": "bow_mfcc.json"
+      }
+    },
+    {
+      "syllable": "ba",
+      "shape": [
+        13,
+        49
+      ],
+      "duration": 0.48,
+      "total_features": 13,
+      "files": {
+        "npz": "ba_mfcc.npz",
+        "json": "ba_mfcc.json"
+      }
+    },
+    {
+      "syllable": "la",
+      "shape": [
+        13,
+        52
+      ],
+      "duration": 0.512,
+      "total_features": 13,
+      "files": {
+        "npz": "la_mfcc.npz",
+        "json": "la_mfcc.json"
+      }
+    },
+    {
+      "syllable": "ma",
+      "shape": [
+        13,
+        55
+      ],
+      "duration": 0.544,
+      "total_features": 13,
+      "files": {
+        "npz": "ma_mfcc.npz",
+        "json": "ma_mfcc.json"
+      }
+    },
+    {
+      "syllable": "ta",
+      "shape": [
+        13,
+        45
+      ],
+      "duration": 0.448,
+      "total_features": 13,
+      "files": {
+        "npz": "ta_mfcc.npz",
+        "json": "ta_mfcc.json"
+      }
+    },
+    {
+      "syllable": "ka",
+      "shape": [
+        13,
+        45
+      ],
+      "duration": 0.448,
+      "total_features": 13,
+      "files": {
+        "npz": "ka_mfcc.npz",
+        "json": "ka_mfcc.json"
+      }
+    },
+    {
+      "syllable": "the",
+      "shape": [
+        13,
+        45
+      ],
+      "duration": 0.448,
+      "total_features": 13,
+      "files": {
+        "npz": "the_mfcc.npz",
+        "json": "the_mfcc.json"
+      }
+    },
+    {
+      "syllable": "wa",
+      "shape": [
+        13,
+        52
+      ],
+      "duration": 0.512,
+      "total_features": 13,
+      "files": {
+        "npz": "wa_mfcc.npz",
+        "json": "wa_mfcc.json"
+      }
+    },
+    {
+      "syllable": "bee",
+      "shape": [
+        13,
+        42
+      ],
+      "duration": 0.416,
+      "total_features": 13,
+      "files": {
+        "npz": "bee_mfcc.npz",
+        "json": "bee_mfcc.json"
+      }
+    },
+    {
+      "syllable": "ra",
+      "shape": [
+        13,
+        58
+      ],
+      "duration": 0.576,
+      "total_features": 13,
+      "files": {
+        "npz": "ra_mfcc.npz",
+        "json": "ra_mfcc.json"
+      }
+    },
+    {
+      "syllable": "na",
+      "shape": [
+        13,
+        52
+      ],
+      "duration": 0.512,
+      "total_features": 13,
+      "files": {
+        "npz": "na_mfcc.npz",
+        "json": "na_mfcc.json"
+      }
+    },
+    {
+      "syllable": "sit",
+      "shape": [
+        13,
+        29
+      ],
+      "duration": 0.288,
+      "total_features": 13,
+      "files": {
+        "npz": "sit_mfcc.npz",
+        "json": "sit_mfcc.json"
+      }
+    },
+    {
+      "syllable": "ya",
+      "shape": [
+        13,
+        61
+      ],
+      "duration": 0.608,
+      "total_features": 13,
+      "files": {
+        "npz": "ya_mfcc.npz",
+        "json": "ya_mfcc.json"
+      }
+    },
+    {
+      "syllable": "za",
+      "shape": [
+        13,
+        45
+      ],
+      "duration": 0.448,
+      "total_features": 13,
+      "files": {
+        "npz": "za_mfcc.npz",
+        "json": "za_mfcc.json"
+      }
+    },
+    {
+      "syllable": "boo",
+      "shape": [
+        13,
+        42
+      ],
+      "duration": 0.416,
+      "total_features": 13,
+      "files": {
+        "npz": "boo_mfcc.npz",
+        "json": "boo_mfcc.json"
+      }
+    },
+    {
+      "syllable": "dog",
+      "shape": [
+        13,
+        45
+      ],
+      "duration": 0.448,
+      "total_features": 13,
+      "files": {
+        "npz": "dog_mfcc.npz",
+        "json": "dog_mfcc.json"
+      }
+    },
+    {
+      "syllable": "run",
+      "shape": [
+        13,
+        52
+      ],
+      "duration": 0.512,
+      "total_features": 13,
+      "files": {
+        "npz": "run_mfcc.npz",
+        "json": "run_mfcc.json"
+      }
+    }
+  ]
+}
