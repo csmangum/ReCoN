@@ -1,0 +1,189 @@
+╔══════════════════════════════════════════════════════════════════════╗
+║           "ENGAGE ACTIVE PERCEPTION" - QUICK REFERENCE               ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+✅ ALL SYLLABLES READY!
+
+┌──────────────────────────────────────────────────────────────────────┐
+│ PHRASE BREAKDOWN                                                     │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  ENGAGE        ACTIVE        PERCEPTION                             │
+│  ↓   ↓         ↓   ↓         ↓    ↓    ↓                           │
+│  en + gage     ac + tiv      per + cep + tion                       │
+│  ✓   ✓         ✓   ✓         ✓    ✓    ✓                           │
+│                                                                      │
+│  7 syllables total • 3.76 seconds (with pauses)                     │
+└──────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│ FILES AVAILABLE                                                      │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│ AUDIO (syllable_dataset/audio/)                                     │
+│   en.wav    gage.wav    ac.wav    tiv.wav                           │
+│   per.wav   cep.wav     tion.wav                                    │
+│                                                                      │
+│ FEATURES (syllable_dataset/features/)                               │
+│   {syllable}_mfcc.npz  - NumPy compressed (recommended)             │
+│   {syllable}_mfcc.json - JSON with metadata                         │
+│                                                                      │
+│ FULL PHRASE                                                          │
+│   engage_active_perception_full.wav  (3.76s)                        │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│ SYLLABLE DETAILS                                                     │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│ Syllable │ IPA   │ Stress     │ Energy  │ Frames │ Duration       │
+│ ─────────┼───────┼────────────┼─────────┼────────┼────────────────│
+│ en       │ /ɛn/  │ unstressed │ -209.44 │ 49     │ 0.48s          │
+│ gage     │ /geɪdʒ/ │ STRESSED │ -190.90 │ 42     │ 0.42s          │
+│ ac       │ /æk/  │ STRESSED   │ -187.12 │ 36     │ 0.35s          │
+│ tiv      │ /tɪv/ │ unstressed │ -194.74 │ 87     │ 0.86s          │
+│ per      │ /pɚ/  │ unstressed │ -196.26 │ 45     │ 0.45s          │
+│ cep      │ /sɛp/ │ STRESSED   │ -191.39 │ 29     │ 0.29s          │
+│ tion     │ /ʃən/ │ unstressed │ -206.51 │ 61     │ 0.61s          │
+│                                                                      │
+│ → Stressed syllables are ~12 dB louder than unstressed              │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│ USAGE - LOAD SYLLABLES                                               │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│ import numpy as np                                                   │
+│                                                                      │
+│ # Load single syllable                                               │
+│ data = np.load('syllable_dataset/features/gage_mfcc.npz')           │
+│ mfcc = data['mfcc']  # Shape: (13, 42)                               │
+│                                                                      │
+│ # Load entire phrase                                                 │
+│ syllables = ['en', 'gage', 'ac', 'tiv', 'per', 'cep', 'tion']       │
+│ features = []                                                        │
+│ for syl in syllables:                                                │
+│     data = np.load(f'syllable_dataset/features/{syl}_mfcc.npz')     │
+│     features.append(np.mean(data['mfcc'], axis=1))                  │
+│                                                                      │
+│ # Stack into phrase matrix                                           │
+│ phrase = np.column_stack(features)  # (13, 7)                        │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│ USAGE - LISTEN TO AUDIO                                              │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│ import librosa                                                       │
+│ import IPython.display as ipd                                        │
+│                                                                      │
+│ # Single syllable                                                    │
+│ audio, sr = librosa.load('syllable_dataset/audio/gage.wav')         │
+│ ipd.Audio(audio, rate=sr)                                            │
+│                                                                      │
+│ # Full phrase                                                        │
+│ audio, sr = librosa.load('engage_active_perception_full.wav')       │
+│ ipd.Audio(audio, rate=sr)                                            │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│ USAGE - COMPARE SYLLABLES                                            │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│ import numpy as np                                                   │
+│                                                                      │
+│ # Load stressed vs unstressed                                        │
+│ gage = np.load('syllable_dataset/features/gage_mfcc.npz')           │
+│ en = np.load('syllable_dataset/features/en_mfcc.npz')               │
+│                                                                      │
+│ # Get mean features                                                  │
+│ gage_mean = np.mean(gage['mfcc'], axis=1)                           │
+│ en_mean = np.mean(en['mfcc'], axis=1)                               │
+│                                                                      │
+│ # Compare energy (c0)                                                │
+│ print(f"gage (stressed):   {gage_mean[0]:.2f}")  # -190.90          │
+│ print(f"en (unstressed):   {en_mean[0]:.2f}")    # -209.44          │
+│ print(f"Difference:        {abs(gage_mean[0] - en_mean[0]):.2f}")   │
+│                                                                      │
+│ # Compute distance                                                   │
+│ dist = np.linalg.norm(gage_mean - en_mean)                          │
+│ print(f"Euclidean distance: {dist:.2f}")                             │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│ DEMONSTRATIONS                                                       │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│ # MFCC extraction demo                                               │
+│ python examples/mfcc_demo.py                                         │
+│                                                                      │
+│ # Phrase syllable demo                                               │
+│ python examples/phrase_demo.py                                       │
+│                                                                      │
+│ # Dataset classification demo                                        │
+│ python examples/syllable_classification_demo.py                      │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│ COMMAND-LINE TOOLS                                                   │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│ # Generate phrase syllables                                          │
+│ python scripts/generate_phrase_syllables.py                          │
+│                                                                      │
+│ # Extract MFCCs from audio                                           │
+│ python scripts/extract_mfcc_features.py your_audio.wav               │
+│                                                                      │
+│ # Process directory                                                  │
+│ python scripts/extract_mfcc_features.py --directory wavs/            │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│ DOCUMENTATION                                                        │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│ MFCC_QUICKSTART.md                  - Quick start guide              │
+│ MFCC_PIPELINE_GUIDE.md              - Complete API reference         │
+│ ENGAGE_ACTIVE_PERCEPTION_SYLLABLES.md - Phrase documentation        │
+│ syllable_dataset/README_PHRASE.md   - Usage examples                │
+│ FINAL_STATUS.md                     - Complete status               │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│ KEY FINDINGS                                                         │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│ ✓ All 7 syllables generated with Google TTS                         │
+│ ✓ MFCC features extracted (13 coefficients × variable frames)       │
+│ ✓ Stressed syllables ~12 dB louder than unstressed                  │
+│ ✓ Each syllable has unique MFCC signature                           │
+│ ✓ Full phrase concatenated (3.76 seconds)                           │
+│ ✓ Compression: ~12x (raw audio → MFCCs)                             │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│ APPLICATIONS                                                         │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│ • Train phrase recognition model (7 syllables)                       │
+│ • Study stress patterns (stressed vs unstressed)                     │
+│ • Analyze syllable timing and transitions                            │
+│ • Generate speech from MFCC features                                 │
+│ • Classify syllables with machine learning                           │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+
+╔══════════════════════════════════════════════════════════════════════╗
+║  ✅ STATUS: COMPLETE AND READY TO USE                                ║
+║  📊 Total: 33 syllables (26 generic + 7 phrase-specific)            ║
+║  🎵 All audio and features available                                 ║
+╚══════════════════════════════════════════════════════════════════════╝

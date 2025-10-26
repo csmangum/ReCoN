@@ -1,0 +1,82 @@
+{
+  "phrase": "Engage Active Perception",
+  "words": [
+    {
+      "word": "engage",
+      "ipa": "/\u025bn\u02c8ge\u026ad\u0292/",
+      "syllables": [
+        "en",
+        "gage"
+      ]
+    },
+    {
+      "word": "active",
+      "ipa": "/\u02c8\u00e6kt\u026av/",
+      "syllables": [
+        "ac",
+        "tiv"
+      ]
+    },
+    {
+      "word": "perception",
+      "ipa": "/p\u025a\u02c8s\u025bp\u0283\u0259n/",
+      "syllables": [
+        "per",
+        "cep",
+        "tion"
+      ]
+    }
+  ],
+  "total_syllables": 7,
+  "syllable_details": {
+    "en": {
+      "text": "en",
+      "ipa": "/\u025bn/",
+      "word": "engage",
+      "position": "first",
+      "description": "unstressed syllable, short e + n"
+    },
+    "gage": {
+      "text": "gage",
+      "ipa": "/ge\u026ad\u0292/",
+      "word": "engage",
+      "position": "second",
+      "description": "stressed syllable, long a + j sound"
+    },
+    "ac": {
+      "text": "ack",
+      "ipa": "/\u00e6k/",
+      "word": "active",
+      "position": "first",
+      "description": "stressed syllable, short a + k"
+    },
+    "tiv": {
+      "text": "tiv",
+      "ipa": "/t\u026av/",
+      "word": "active",
+      "position": "second",
+      "description": "unstressed syllable, short i + v"
+    },
+    "per": {
+      "text": "purr",
+      "ipa": "/p\u025a/",
+      "word": "perception",
+      "position": "first",
+      "description": "unstressed syllable, p + er sound"
+    },
+    "cep": {
+      "text": "sep",
+      "ipa": "/s\u025bp/",
+      "word": "perception",
+      "position": "second",
+      "description": "stressed syllable, s + short e + p"
+    },
+    "tion": {
+      "text": "shun",
+      "ipa": "/\u0283\u0259n/",
+      "word": "perception",
+      "position": "third",
+      "description": "unstressed syllable, sh + schwa + n"
+    }
+  }
+}
