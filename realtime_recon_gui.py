@@ -13,26 +13,29 @@ import time
 import queue
 import sys
 import os
-from typing import Dict, Any, Optional
 import numpy as np
-import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 import networkx as nx
+import pygame
 
 # Add project root to Python path
-sys.path.insert(0, '/workspace')
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from audio_capture import AudioCapture, AudioProcessor
 from recon_core.compiler import compile_from_file
 from recon_core.engine import Engine
 from recon_core.config import EngineConfig
-from recon_core.enums import UnitType, State, LinkType
+from recon_core.enums import UnitType, State
 
 class ReCoNRealtimeGUI:
     """Real-time ReCoN visualization GUI."""
     
     def __init__(self):
+        # Initialize pygame before creating tkinter widgets
+        pygame.mixer.pre_init(frequency=22050, size=-16, channels=1, buffer=1024)
+        pygame.mixer.init()
+        
         self.root = tk.Tk()
         self.root.title("ReCoN Real-time Audio Recognition: 'Engage Active Perception'")
         self.root.geometry("1400x900")
@@ -49,10 +52,12 @@ class ReCoNRealtimeGUI:
         
         # Create GUI elements
         self.create_widgets()
-        self.setup_recon_network()
         
         # Start update loop
         self.update_gui()
+        
+        # Setup ReCoN network after GUI is created
+        self.root.after(100, self.setup_recon_network)
         
     def create_widgets(self):
         """Create the GUI widgets."""
@@ -80,18 +85,18 @@ class ReCoNRealtimeGUI:
         button_frame = ttk.Frame(control_frame)
         button_frame.pack(fill=tk.X)
         
-        self.start_button = ttk.Button(button_frame, text="Start Recognition", 
-                                     command=self.start_recognition)
+        self.start_button = ttk.Button(button_frame, text="Start Recognition")
         self.start_button.pack(side=tk.LEFT, padx=(0, 10))
+        self.start_button.config(command=self.start_recognition)
         
-        self.stop_button = ttk.Button(button_frame, text="Stop Recognition", 
-                                    command=self.stop_recognition, state=tk.DISABLED)
+        self.stop_button = ttk.Button(button_frame, text="Stop Recognition", state=tk.DISABLED)
         self.stop_button.pack(side=tk.LEFT, padx=(0, 10))
+        self.stop_button.config(command=self.stop_recognition)
         
         # Reset button
-        self.reset_button = ttk.Button(button_frame, text="Reset Network", 
-                                     command=self.reset_network)
+        self.reset_button = ttk.Button(button_frame, text="Reset Network")
         self.reset_button.pack(side=tk.LEFT, padx=(0, 10))
+        self.reset_button.config(command=self.reset_network)
         
         # Settings frame
         settings_frame = ttk.Frame(control_frame)
@@ -209,7 +214,8 @@ class ReCoNRealtimeGUI:
         """Setup the ReCoN network."""
         try:
             # Compile the graph
-            self.recon_graph = compile_from_file('/workspace/scripts/engage_active_perception.yaml')
+            script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scripts', 'engage_active_perception.yaml')
+            self.recon_graph = compile_from_file(script_path)
             
             # Create engine with configuration
             config = EngineConfig(
@@ -528,6 +534,10 @@ class ReCoNRealtimeGUI:
     def update_gui(self):
         """Update the GUI (called periodically)."""
         try:
+            # Check if root window still exists
+            if not hasattr(self, 'root') or not self.root.winfo_exists():
+                return
+                
             # Process updates from queue
             while not self.update_queue.empty():
                 try:
@@ -554,7 +564,8 @@ class ReCoNRealtimeGUI:
             
         except Exception as e:
             print(f"Error in GUI update: {e}")
-            self.root.after(100, self.update_gui)
+            if hasattr(self, 'root') and self.root.winfo_exists():
+                self.root.after(100, self.update_gui)
     
     def handle_update(self, data):
         """Handle update data."""
@@ -606,6 +617,7 @@ class ReCoNRealtimeGUI:
             print("GUI interrupted by user")
         finally:
             self.stop_recognition()
+            pygame.mixer.quit()
 
 def main():
     """Main function."""

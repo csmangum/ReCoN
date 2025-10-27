@@ -4,55 +4,55 @@
 # Links: SUB for evidence, SUR for requests, POR for sequencing, RET for feedback
 
 units:
-  # Root script: Confirms entire phrase (threshold 0.8)
+  # Root script: Confirms entire phrase (threshold 0.9)
   u_phrase:
     type: SCRIPT
-    thresh: 0.8
+    thresh: 0.9
 
   # Word-level scripts
   u_engage:  # "engage" (/ɛnˈgeɪdʒ/)
     type: SCRIPT
-    thresh: 0.7
+    thresh: 0.85
   u_active:  # "active" (/ˈæktɪv/)
     type: SCRIPT
-    thresh: 0.65
+    thresh: 0.8
   u_perception:  # "perception" (/pərˈsɛpʃən/)
     type: SCRIPT
-    thresh: 0.75  # More complex word
+    thresh: 0.85  # More complex word
 
   # Phoneme-level scripts (simplified; expand as needed)
   # For "engage": /ɛn/, /geɪ/, /dʒ/
   u_en_phoneme:
     type: SCRIPT
-    thresh: 0.5
+    thresh: 0.7
   u_gei_phoneme:
     type: SCRIPT
-    thresh: 0.5
+    thresh: 0.7
   u_dj_phoneme:
     type: SCRIPT
-    thresh: 0.5
+    thresh: 0.7
 
   # For "active": /æk/, /tɪ/, /v/
   u_ak_phoneme:
     type: SCRIPT
-    thresh: 0.5
+    thresh: 0.7
   u_ti_phoneme:
     type: SCRIPT
-    thresh: 0.5
+    thresh: 0.7
   u_v_phoneme:
     type: SCRIPT
-    thresh: 0.5
+    thresh: 0.7
 
   # For "perception": /pər/, /sɛp/, /ʃən/ (simplified)
   u_per_phoneme:
     type: SCRIPT
-    thresh: 0.5
+    thresh: 0.7
   u_sep_phoneme:
     type: SCRIPT
-    thresh: 0.5
+    thresh: 0.7
   u_shun_phoneme:
     type: SCRIPT
-    thresh: 0.5
+    thresh: 0.7
 
   # Terminal units (audio features, e.g., via librosa)
   t_mfcc_low:
@@ -359,6 +359,6 @@ links:
 
 # Config overrides
 config:
-  confirmation_ratio: 0.75
+  confirmation_ratio: 0.85
   sur_positive: 0.4
   ret_feedback_enabled: true

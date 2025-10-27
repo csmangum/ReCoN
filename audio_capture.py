@@ -11,7 +11,7 @@ import numpy as np
 import threading
 import time
 import queue
-from typing import Optional, Callable, Tuple
+from typing import Optional, Callable
 import librosa
 import sounddevice as sd
 
@@ -243,7 +243,7 @@ class AudioProcessor:
         try:
             rms = librosa.feature.rms(y=audio_data)[0]
             return np.mean(rms) > threshold
-        except:
+        except Exception:
             return False
 
 def test_audio_capture():
