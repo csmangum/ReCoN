@@ -2,6 +2,7 @@
 """
 Syllable Template Learning App
 
+
 A simplified tkinter application focused on understanding how syllable/phoneme 
 templates work in the ReCoN system. This helps users get better intuition on 
 how to make terminal scripts more accurate.
@@ -23,7 +24,7 @@ import numpy as np
 # Import ReCoN modules
 import sys
 import os
-sys.path.append('/workspace')
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from recon_core.compiler import compile_from_dict
 from recon_core.engine import Engine
@@ -47,12 +48,14 @@ class SyllableLearningApp:
         # Current state
         self.current_step = 0
         self.selected_syllable = None
+        self.network_propagation_mode = False  # Toggle for learning vs network behavior
         
     def load_network(self):
         """Load the audio phrase recognition network."""
         try:
             import yaml
-            with open('/workspace/scripts/engage_active_perception.yaml', 'r') as f:
+            script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scripts', 'engage_active_perception.yaml')
+            with open(script_path, 'r') as f:
                 network_spec = yaml.safe_load(f)
             
             # Compile the network
@@ -204,7 +207,12 @@ SYLLABLE TEMPLATE LEARNING TIPS:
    - Templates are made up of terminal units (MFCC, pitch, formant, etc.)
    - When you click a syllable, it activates its template and shows you what features are important
 
-2. AUDIO FEATURES EXPLAINED:
+2. LEARNING MODES:
+   - ISOLATED MODE (default): Only the clicked syllable activates, but its terminals still activate - good for learning individual templates
+   - NETWORK MODE: Related syllables also activate - shows how ReCoN networks actually work
+   - Use the toggle button to switch between modes
+
+3. AUDIO FEATURES EXPLAINED:
    - t_mfcc_low: Low frequency features (good for vowels like /a/, /e/, /o/)
    - t_pitch_high: High frequency features (good for consonants like /s/, /t/, /k/)
    - t_formant: Vowel formant structure (crucial for distinguishing vowels)
@@ -212,21 +220,22 @@ SYLLABLE TEMPLATE LEARNING TIPS:
    - t_spectrogram: Overall frequency content
    - t_noise_level: Background noise (inhibits recognition when high)
 
-3. MAKING TERMINALS MORE ACCURATE:
+4. MAKING TERMINALS MORE ACCURATE:
    - Vowels need strong MFCC and formant features
    - Consonants need strong pitch and spectrogram features
    - Adjust thresholds based on what you observe
    - Consider noise levels in real environments
    - Test with different syllable combinations
 
-4. TEMPLATE ACTIVATION PATTERNS:
+5. TEMPLATE ACTIVATION PATTERNS:
    - Green = CONFIRMED (template fully activated)
    - Yellow = ACTIVE (template partially activated)
    - Orange = REQUESTED (template waiting for evidence)
    - Gray = INACTIVE (template not activated)
 
-5. EXPERIMENTATION:
-   - Try clicking different syllables to see their unique patterns
+6. EXPERIMENTATION:
+   - Start in ISOLATED mode to understand individual syllable templates
+   - Switch to NETWORK mode to see how syllables influence each other
    - Notice how similar syllables have similar feature patterns
    - Use this to understand why some syllables are confused
    - Adjust terminal weights and thresholds accordingly
@@ -244,6 +253,10 @@ SYLLABLE TEMPLATE LEARNING TIPS:
         ttk.Button(parent, text="Reset All", command=self.reset_all).pack(side=tk.LEFT, padx=(0, 5))
         ttk.Button(parent, text="Show All Features", command=self.show_all_features).pack(side=tk.LEFT, padx=(0, 5))
         ttk.Button(parent, text="Run Full Simulation", command=self.run_full_simulation).pack(side=tk.LEFT, padx=(0, 5))
+        
+        # Toggle button for network propagation mode
+        self.toggle_btn = ttk.Button(parent, text="Enable Network Mode", command=self.toggle_network_mode)
+        self.toggle_btn.pack(side=tk.LEFT, padx=(0, 5))
         
         # Status
         self.status_var = tk.StringVar(value="Ready - Click a syllable to begin")
@@ -263,15 +276,20 @@ SYLLABLE TEMPLATE LEARNING TIPS:
             unit.state = State.ACTIVE
             unit.a = 1.0
             
-            # Run a few steps to propagate the activation
-            for _ in range(3):
+            if self.network_propagation_mode:
+                # Run a few steps to propagate the activation (shows network behavior)
+                for _ in range(3):
+                    self.engine.step()
+                self.status_var.set(f"Activated {syllable_id} with network propagation")
+            else:
+                # In isolated mode, still need to activate terminals connected to this syllable
+                # Run just one step to process SUR requests from syllable to terminals
                 self.engine.step()
+                self.status_var.set(f"Activated {syllable_id} (isolated view)")
             
             # Update displays
             self.update_syllable_buttons()
             self.update_template_display()
-            
-            self.status_var.set(f"Activated {syllable_id} - Check template features")
     
     def reset_all(self):
         """Reset all syllables and displays."""
@@ -303,6 +321,21 @@ SYLLABLE TEMPLATE LEARNING TIPS:
             time.sleep(0.3)
         
         self.status_var.set("Full simulation completed - Check results")
+    
+    def toggle_network_mode(self):
+        """Toggle between isolated syllable view and network propagation mode."""
+        self.network_propagation_mode = not self.network_propagation_mode
+        
+        if self.network_propagation_mode:
+            self.toggle_btn.configure(text="Disable Network Mode")
+            self.status_var.set("Network propagation mode enabled - syllables will activate related syllables")
+        else:
+            self.toggle_btn.configure(text="Enable Network Mode")
+            self.status_var.set("Isolated syllable mode - only clicked syllable will be active")
+        
+        # If a syllable is currently selected, reactivate it with the new mode
+        if self.selected_syllable:
+            self.activate_syllable(self.selected_syllable)
     
     def update_syllable_buttons(self):
         """Update syllable button colors based on their states."""
