@@ -1,6 +1,6 @@
 # Core dependencies for ReCoN
 numpy>=2.1.0
-pillow==12.2.0
+pillow==12.3.0
 pyyaml==6.0.2
 networkx==3.3
 streamlit==1.54.0
